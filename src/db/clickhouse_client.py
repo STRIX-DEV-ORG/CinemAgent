@@ -1,11 +1,14 @@
 import clickhouse_connect
 from clickhouse_connect.driver.client import Client
+from pathlib import Path
+from typing import Iterator
 import structlog
 from src.config import settings
 
 logger = structlog.get_logger(__name__)
 
 _client: Client = None
+MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 def get_clickhouse_client() -> Client:
     """
@@ -36,6 +39,84 @@ def get_clickhouse_client() -> Client:
     return _client
 
 
+def get_clickhouse_root_client() -> Client:
+    """Return a ClickHouse client connected without selecting an application database."""
+    return clickhouse_connect.get_client(
+        host=settings.CLICKHOUSE_HOST,
+        port=settings.CLICKHOUSE_PORT,
+        username=settings.CLICKHOUSE_USER,
+        password=settings.CLICKHOUSE_PASSWORD,
+        secure=settings.CLICKHOUSE_SECURE,
+    )
+
+
+def _split_sql_statements(sql: str) -> Iterator[str]:
+    """Yield semicolon-terminated SQL statements while preserving quoted values."""
+    statement: list[str] = []
+    quote: str | None = None
+    escaped = False
+
+    for character in sql:
+        statement.append(character)
+
+        if quote:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+        elif character in {"'", '"', '`'}:
+            quote = character
+        elif character == ";":
+            query = "".join(statement).strip()
+            if query:
+                yield query
+            statement = []
+
+    query = "".join(statement).strip()
+    if query:
+        yield query
+
+
+def execute_sql_file(filename: str, client: Client | None = None) -> None:
+    """Execute every statement in a ClickHouse SQL migration file.
+
+    ClickHouse's ``command`` method executes a single statement, so migration
+    files are split before execution. When no client is supplied, the helper
+    connects without an application database selected; this supports migration
+    files that choose their database with ``USE``.
+    """
+    migration_path = MIGRATIONS_DIR / filename
+    sql = migration_path.read_text(encoding="utf-8")
+    migration_client = client if client is not None else get_clickhouse_root_client()
+
+    logger.info("Executing ClickHouse SQL migration", migration=filename)
+    for statement in _split_sql_statements(sql):
+        migration_client.command(statement)
+    logger.info("ClickHouse SQL migration completed", migration=filename)
+
+
+def create_schemas(client: Client | None = None) -> None:
+    """Create the ClickHouse narrative-graph tables from the schema migration."""
+    execute_sql_file("001_create_schemas.sql", client)
+
+
+def drop_schemas(client: Client | None = None) -> None:
+    """Drop the ClickHouse narrative-graph tables from the schema migration."""
+    execute_sql_file("001_drop_schemas.sql", client)
+
+
+def execute_create_schemas(client: Client | None = None) -> None:
+    """Execute the ClickHouse create-schema migration."""
+    create_schemas(client)
+
+
+def execute_drop_schemas(client: Client | None = None) -> None:
+    """Execute the ClickHouse drop-schema migration."""
+    drop_schemas(client)
+
+
 def init_db() -> None:
     """
     Run initial DDL setup on ClickHouse.
@@ -44,17 +125,15 @@ def init_db() -> None:
     logger.info("Starting database schema initialization...")
     try:
         # First connect without specifying database to create it if it doesn't exist
-        root_client = clickhouse_connect.get_client(
-            host=settings.CLICKHOUSE_HOST,
-            port=settings.CLICKHOUSE_PORT,
-            username=settings.CLICKHOUSE_USER,
-            password=settings.CLICKHOUSE_PASSWORD,
-            secure=settings.CLICKHOUSE_SECURE
-        )
+        root_client = get_clickhouse_root_client()
         
         # Create database
         root_client.command(f"CREATE DATABASE IF NOT EXISTS {settings.CLICKHOUSE_DATABASE}")
         logger.info(f"Database '{settings.CLICKHOUSE_DATABASE}' ready.")
+
+        # Run the narrative-graph DDL added in the SQL migrations. The migration
+        # selects its target database, so execute it with the root client.
+        create_schemas(root_client)
         
         # Now connect to specific database to build tables
         client = get_clickhouse_client()
