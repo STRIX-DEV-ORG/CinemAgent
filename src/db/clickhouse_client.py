@@ -99,12 +99,12 @@ def execute_sql_file(filename: str, client: Client | None = None) -> None:
 
 def create_schemas(client: Client | None = None) -> None:
     """Create the ClickHouse narrative-graph tables from the schema migration."""
-    execute_sql_file("001_create_schemas.sql", client)
+    execute_sql_file("create_schemas.sql", client)
 
 
 def drop_schemas(client: Client | None = None) -> None:
     """Drop the ClickHouse narrative-graph tables from the schema migration."""
-    execute_sql_file("001_drop_schemas.sql", client)
+    execute_sql_file("drop_schemas.sql", client)
 
 
 def execute_create_schemas(client: Client | None = None) -> None:
