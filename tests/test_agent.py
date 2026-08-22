@@ -1,10 +1,31 @@
 import unittest
+from typing import Any
 from fastapi.testclient import TestClient
+from google.adk import Context, Workflow
+from google.adk.workflow import node
 
 from src.config import settings
 from src.rag.embedder import Embedder
 from src.rag.retriever import Retriever
 from src.main import app
+
+
+@node(name="hello_node")
+def my_node(node_input: Any):
+    return "Hello World"
+
+
+@node(rerun_on_resume=True)
+async def my_workflow(ctx: Context, node_input: str) -> str:
+    # run_node executes a node and returns its output
+    result = await ctx.run_node(my_node, node_input="hello")
+    return result
+
+
+root_agent = Workflow(
+    name="root_agent",
+    edges=[("START", my_workflow)],
+)
 
 
 class TestCinemAgent(unittest.TestCase):
@@ -24,12 +45,11 @@ class TestCinemAgent(unittest.TestCase):
         """Test basic entity extraction tokenizing rules."""
         retriever = Retriever()
         entities = retriever.extract_entities_stub("Who directed the movie Interstellar and starring Matthew McConaughey?")
-        # Capitalized/large words like Interstellar, Matthew, McConaughey should be identified
         self.assertIn("interstellar", entities)
         self.assertIn("matthew", entities)
 
     def test_health_endpoint_fallback(self):
-        """Test health endpoint responds (might show degraded if ClickHouse isn't local, which is fine)."""
+        """Test health endpoint responds."""
         with TestClient(app) as client:
             response = client.get("/health")
             self.assertEqual(response.status_code, 200)
@@ -37,6 +57,11 @@ class TestCinemAgent(unittest.TestCase):
             self.assertIn("status", data)
             self.assertIn("database", data)
 
+    def test_workflow_definition(self):
+        """Test ADK workflow structure initialization."""
+        self.assertEqual(root_agent.name, "root_agent")
+
 
 if __name__ == "__main__":
     unittest.main()
+
