@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     # API Keys
     GEMINI_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
 
     # ClickHouse Settings
     CLICKHOUSE_HOST: str = "localhost"
