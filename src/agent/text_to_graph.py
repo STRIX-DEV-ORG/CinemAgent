@@ -19,15 +19,7 @@ from google.adk.tools import agent_tool
 from google.adk import Context
 from google.adk import Workflow
 from google.adk.workflow import node
-# -----------------------------------------------------------------------------
-# SQL Script Skeleton Tool
-# -----------------------------------------------------------------------------
-def sql_script(query: str) -> str:
-    """
-   ALL CRITICAL TOOLS LIKE UOPDATE DATABASE MUST USE AN API (CASIC CRUD)
-   THIS IS JUST A SKELETON TOOL FOR NOW
-    """
-    return "SQL query execution is not implemented in this scope."
+from tools.db_tools import execute_narrative_crud, generate_id_tool
 class GlobalGemini(Gemini):
     """Pins the Vertex AI client to the `global` location.
     gemini-3 series models are only served from `global`; the default ADK
@@ -52,7 +44,7 @@ narrative_analyzer = LlmAgent(
     ),
     sub_agents=[],
     instruction=NARRATIVE_ANALYZER_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud, generate_id_tool],
 )
 entity_resolution_agent = LlmAgent(
     name='entity_resolution_agent',
@@ -62,7 +54,7 @@ entity_resolution_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=ENTITY_RESOLUTION_AGENT_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud, generate_id_tool],
 )
 event_extraction_agent = LlmAgent(
     name='event_extraction_agent',
@@ -72,7 +64,7 @@ event_extraction_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=EVENT_EXTRACTION_AGENT_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 statement_extraction_agent = LlmAgent(
     name='statement_extraction_agent',
@@ -82,7 +74,7 @@ statement_extraction_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=STATEMENT_EXTRACTION_AGENT_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 time_resolution_agent = LlmAgent(
     name='time_resolution_agent',
@@ -92,7 +84,7 @@ time_resolution_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=TIME_RESOLUTION_AGENT_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 context_resolution_agent_2 = LlmAgent(
     name='context_resolution_agent_2',
@@ -102,7 +94,7 @@ context_resolution_agent_2 = LlmAgent(
     ),
     sub_agents=[],
     instruction=CONTEXT_RESOLUTION_AGENT_2_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 graph_integration_agent = LlmAgent(
     name='graph_integration_agent',
@@ -112,7 +104,7 @@ graph_integration_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=GRAPH_INTEGRATION_AGENT_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 validation_agent = LlmAgent(
     name='validation_agent',
@@ -122,7 +114,7 @@ validation_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=VALIDATION_AGENT_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 # -----------------------------------------------------------------------------
 # Root Agent

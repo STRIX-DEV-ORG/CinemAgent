@@ -19,18 +19,7 @@ from src.agent.prompts import (
     GRAPH_FEEDBACK_AGENT_INSTRUCTION,
     STORY_REQUEST_INTERPRETER_INSTRUCTION,
 )
-
-# -----------------------------------------------------------------------------
-# SQL Script Skeleton Tool
-# -----------------------------------------------------------------------------
-def sql_script(query: str) -> str:
-    """
-    Executes a SQL script against the database.
-    This is a skeleton tool for now.
-    """
-    return "SQL query execution is not implemented in this scope."
-
-
+from tools.db_tools import execute_narrative_crud
 class GlobalGemini(Gemini):
     """Pins the Vertex AI client to the `global` location.
     gemini-3 series models are only served from `global`; the default ADK
@@ -58,7 +47,7 @@ graph_retrieval_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=GRAPH_RETRIEVAL_AGENT_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 
 narrative_planner = LlmAgent(
@@ -69,7 +58,7 @@ narrative_planner = LlmAgent(
     ),
     sub_agents=[],
     instruction=NARRATIVE_PLANNER_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 
 scene_planner = LlmAgent(
@@ -80,7 +69,7 @@ scene_planner = LlmAgent(
     ),
     sub_agents=[],
     instruction=SCENE_PLANNER_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 
 prose_writer = LlmAgent(
@@ -91,7 +80,7 @@ prose_writer = LlmAgent(
     ),
     sub_agents=[],
     instruction=PROSE_WRITER_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 
 style_agent = LlmAgent(
@@ -102,7 +91,7 @@ style_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=STYLE_AGENT_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 
 narrative_consistency_agent = LlmAgent(
@@ -113,7 +102,7 @@ narrative_consistency_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=NARRATIVE_CONSISTENCY_AGENT_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 
 graph_feedback_agent = LlmAgent(
@@ -124,7 +113,7 @@ graph_feedback_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=GRAPH_FEEDBACK_AGENT_INSTRUCTION,
-    tools=[sql_script],
+    tools=[execute_narrative_crud],
 )
 
 # -----------------------------------------------------------------------------
