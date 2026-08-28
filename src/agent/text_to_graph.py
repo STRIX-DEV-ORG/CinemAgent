@@ -7,8 +7,6 @@ from src.agent.prompts import (
     CONTEXT_RESOLUTION_AGENT_2_INSTRUCTION,
     GRAPH_INTEGRATION_AGENT_INSTRUCTION,
     VALIDATION_AGENT_INSTRUCTION,
-    INGESTION_AGENT_GOOGLE_SEARCH_AGENT_INSTRUCTION,
-    INGESTION_AGENT_URL_CONTEXT_AGENT_INSTRUCTION,
     ROOT_AGENT_INSTRUCTION
 )
 import json
@@ -26,8 +24,8 @@ from google.adk.workflow import node
 # -----------------------------------------------------------------------------
 def sql_script(query: str) -> str:
     """
-    Executes a SQL script against the database.
-    This is a skeleton tool for now.
+   ALL CRITICAL TOOLS LIKE UOPDATE DATABASE MUST USE AN API (CASIC CRUD)
+   THIS IS JUST A SKELETON TOOL FOR NOW
     """
     return "SQL query execution is not implemented in this scope."
 class GlobalGemini(Gemini):
