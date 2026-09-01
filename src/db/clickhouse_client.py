@@ -52,6 +52,9 @@ def get_clickhouse_root_client() -> Client:
 
 def _split_sql_statements(sql: str) -> Iterator[str]:
     """Yield semicolon-terminated SQL statements while preserving quoted values."""
+    # Migration comments may contain semicolons. Exclude full-line comments
+    # before splitting so they are never sent to ClickHouse as empty queries.
+    sql = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
     statement: list[str] = []
     quote: str | None = None
     escaped = False
@@ -84,12 +87,11 @@ def execute_sql_file(filename: str, client: Client | None = None) -> None:
 
     ClickHouse's ``command`` method executes a single statement, so migration
     files are split before execution. When no client is supplied, the helper
-    connects without an application database selected; this supports migration
-    files that choose their database with ``USE``.
+    uses the configured application database.
     """
     migration_path = MIGRATIONS_DIR / filename
     sql = migration_path.read_text(encoding="utf-8")
-    migration_client = client if client is not None else get_clickhouse_root_client()
+    migration_client = client if client is not None else get_clickhouse_client()
 
     logger.info("Executing ClickHouse SQL migration", migration=filename)
     for statement in _split_sql_statements(sql):
@@ -131,12 +133,11 @@ def init_db() -> None:
         root_client.command(f"CREATE DATABASE IF NOT EXISTS {settings.CLICKHOUSE_DATABASE}")
         logger.info(f"Database '{settings.CLICKHOUSE_DATABASE}' ready.")
 
-        # Run the narrative-graph DDL added in the SQL migrations. The migration
-        # selects its target database, so execute it with the root client.
-        create_schemas(root_client)
-        
         # Now connect to specific database to build tables
         client = get_clickhouse_client()
+
+        # Run narrative-graph DDL in the configured application database.
+        create_schemas(client)
         
         # Create Vector Embeddings Table
         client.command("""

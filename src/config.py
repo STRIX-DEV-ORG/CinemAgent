@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # MCP (Model Context Protocol) Settings
     SEARCH_MCP_URL: Optional[str] = "http://localhost:5005"
 
+    # Narrative Graph API settings
+    NARRATIVE_API_KEY: str = ""
+    NARRATIVE_API_URL: str = "http://localhost:8080"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -70,6 +70,30 @@ Configuration is loaded from environment variables or a local `.env` file. Key v
 | `GCP_LOCATION` | Region for GCP deployment | `us-central1` |
 | `GEMINI_API_KEY` | API Key for Gemini Models (Google GenAI) | `""` |
 | `PORT` | Listening port for the application | `8080` |
+| `NARRATIVE_API_KEY` | Bearer token required by narrative graph endpoints | `""` |
+
+---
+
+## Narrative Graph API
+
+The writer UI and ADK agents share the authenticated `/v1/narrative-graphs` API. Create a graph first, submit validated operations as an idempotent batch, poll the batch until it is `applied`, and then retrieve a focused subgraph for entity resolution or prose generation.
+
+```bash
+# Create a story graph
+curl -X POST http://localhost:8080/v1/narrative-graphs \
+  -H "Authorization: Bearer $NARRATIVE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"The Silent Throne"}'
+
+# Submit operations produced by the validation agent
+curl -X POST "http://localhost:8080/v1/narrative-graphs/GRAPH_UUID/operation-batches" \
+  -H "Authorization: Bearer $NARRATIVE_API_KEY" \
+  -H "Idempotency-Key: ingestion-segment-001" \
+  -H "Content-Type: application/json" \
+  -d '{"operations":[{"id":"OPERATION_UUID","operation_type":"create_entity","origin":"agent","payload":{"id":"ENTITY_UUID","name":"Elena","type":"character","status":"active","metadata":{}},"provenance":{"segment_id":"seg_001"}}]}'
+```
+
+Use `GET /{graph_id}/operation-batches/{batch_id}` to poll write status. Use `POST /{graph_id}/subgraph:query` with entity/event anchors and an optional `viewpoint_entity_id` to obtain the restricted graph context used by retrieval and generation agents.
 
 ---
 

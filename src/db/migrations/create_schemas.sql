@@ -1,5 +1,3 @@
-USE default;
-
 -- =========================================================
 -- NARRATIVE GRAPH
 -- =========================================================
@@ -318,3 +316,39 @@ ORDER BY (
     target_id,
     evidence_id
 );
+
+
+-- Accepted agent/UI write batches. Individual operations are immutable;
+-- status fields are updated by the materializer as ClickHouse mutations.
+CREATE TABLE IF NOT EXISTS operation_batch
+(
+    id UUID,
+    graph_id UUID,
+    idempotency_key String,
+    status LowCardinality(String),
+    operation_count UInt32,
+    error Nullable(String),
+    created_at DateTime64(3) DEFAULT now64(3),
+    updated_at DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = MergeTree()
+ORDER BY (graph_id, id);
+
+
+CREATE TABLE IF NOT EXISTS graph_operation
+(
+    id UUID,
+    batch_id UUID,
+    graph_id UUID,
+    sequence UInt32,
+    operation_type LowCardinality(String),
+    payload JSON,
+    provenance JSON,
+    origin LowCardinality(String),
+    status LowCardinality(String),
+    error Nullable(String),
+    created_at DateTime64(3) DEFAULT now64(3),
+    applied_at Nullable(DateTime64(3))
+)
+ENGINE = MergeTree()
+ORDER BY (batch_id, sequence, id);

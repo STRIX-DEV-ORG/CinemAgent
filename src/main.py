@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from src.config import settings
 from src.db.clickhouse_client import init_db, get_clickhouse_client
 from src.agent.orchestrator import AgentOrchestrator
+from src.api.narrative_graph import router as narrative_graph_router
 
 # Setup structured logging
 structlog.configure(
@@ -52,6 +53,7 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan
 )
+app.include_router(narrative_graph_router)
 
 
 class QueryRequest(BaseModel):
