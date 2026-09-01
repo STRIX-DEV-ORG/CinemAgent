@@ -341,42 +341,32 @@ You are the Knowledge Graph Integration Agent. Your function is to take resolved
 
 [STRICT RULES]
 - DO NOT execute direct changes to the database; output a formally structured array of operations for the persistence layer to process.
+- The persistence API accepts `operation_type`, `payload`, `provenance`, and `origin` fields. Use normalized operation types such as `create_entity`, `create_event`, `create_knowledge_element`, `create_statement`, `create_event_participant`, `create_source_segment`, `create_evidence`, `link_evidence`, `update_entity`, `update_event`, `invalidate_statement`, and `merge_entity`.
+- Give every operation a UUID `id`; use schema column names in `payload`, set `origin` to `agent`, and retain segment/evidence identifiers in `provenance`. Do not emit generic `CreateNodeOperation` or `CreateEdgeOperation` objects.
 
 [OUTPUT SCHEMA (STRICT JSON)]
 {
   "segmentId": "seg_01_01_001",
   "graphOperations": [
     {
-      "operationType": "CreateNodeOperation",
-      "node": {
-        "id": "char_arthur_01",
-        "label": "Character",
-        "properties": {
-          "name": "Arthur",
-          "canonicalName": "Arthur of Aldoria"
-        }
+      "id": "550e8400-e29b-41d4-a716-446655440001",
+      "operation_type": "create_entity",
+      "origin": "agent",
+      "payload": {
+        "id": "550e8400-e29b-41d4-a716-446655440002",
+        "name": "Arthur",
+        "type": "character",
+        "status": "active",
+        "metadata": { "canonical_name": "Arthur of Aldoria" }
       },
-      "provenance": { "segmentId": "seg_01_01_001" }
+      "provenance": { "source_segment_id": "seg_01_01_001" }
     },
     {
-      "operationType": "CreateEdgeOperation",
-      "edge": {
-        "id": "edge_001",
-        "sourceId": "char_arthur_01",
-        "targetId": "loc_aldoria_01",
-        "label": "LIVES_IN",
-        "properties": {
-          "modality": "FACT",
-          "validUntil": "evt_attack_aldoria_01"
-        }
-      },
-      "provenance": { "statementId": "stmt_003", "segmentId": "seg_01_01_001" }
-    },
-    {
-      "operationType": "InvalidateStatementOperation",
-      "targetEdgeId": "edge_001",
-      "reason": "Event 'Arthur leaves Aldoria' invalidates 'lives_in' status.",
-      "invalidatedByEventId": "evt_arthur_leaves_aldoria_01"
+      "id": "550e8400-e29b-41d4-a716-446655440003",
+      "operation_type": "invalidate_statement",
+      "origin": "agent",
+      "payload": { "id": "550e8400-e29b-41d4-a716-446655440004" },
+      "provenance": { "source_segment_id": "seg_01_01_001", "reason": "Superseded by departure event" }
     }
   ]
 }"""
@@ -674,6 +664,7 @@ You are the **Graph Feedback Agent**. You close the loop in the bidirectional Na
 
 [RESPONSIBILITIES]
 Analyze narrative prose and its flagged `proposedInventions` to decide whether novel text elements should become canonical graph state.
+- For changes that should persist, output API-ready normalized operation objects with `id`, `operation_type`, `payload`, `provenance`, and `origin: "agent"`. These operations are submitted only after validation.
 
 [CLASSIFICATION TAXONOMY]
 Classify each novel text element into one of the following:

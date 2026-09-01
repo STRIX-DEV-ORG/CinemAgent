@@ -19,7 +19,8 @@ from google.adk.tools import agent_tool
 from google.adk import Context
 from google.adk import Workflow
 from google.adk.workflow import node
-from tools.db_tools import execute_narrative_crud, generate_id_tool
+from src.agent.tools.db_tools import generate_id_tool
+from src.agent.tools.narrative_api import query_narrative_subgraph, submit_narrative_operations, get_operation_batch
 class GlobalGemini(Gemini):
     """Pins the Vertex AI client to the `global` location.
     gemini-3 series models are only served from `global`; the default ADK
@@ -44,7 +45,7 @@ narrative_analyzer = LlmAgent(
     ),
     sub_agents=[],
     instruction=NARRATIVE_ANALYZER_INSTRUCTION,
-    tools=[execute_narrative_crud, generate_id_tool],
+    tools=[query_narrative_subgraph, generate_id_tool],
 )
 entity_resolution_agent = LlmAgent(
     name='entity_resolution_agent',
@@ -54,7 +55,7 @@ entity_resolution_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=ENTITY_RESOLUTION_AGENT_INSTRUCTION,
-    tools=[execute_narrative_crud, generate_id_tool],
+    tools=[query_narrative_subgraph, generate_id_tool],
 )
 event_extraction_agent = LlmAgent(
     name='event_extraction_agent',
@@ -64,7 +65,7 @@ event_extraction_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=EVENT_EXTRACTION_AGENT_INSTRUCTION,
-    tools=[execute_narrative_crud],
+    tools=[query_narrative_subgraph],
 )
 statement_extraction_agent = LlmAgent(
     name='statement_extraction_agent',
@@ -74,7 +75,7 @@ statement_extraction_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=STATEMENT_EXTRACTION_AGENT_INSTRUCTION,
-    tools=[execute_narrative_crud],
+    tools=[query_narrative_subgraph],
 )
 time_resolution_agent = LlmAgent(
     name='time_resolution_agent',
@@ -84,7 +85,7 @@ time_resolution_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=TIME_RESOLUTION_AGENT_INSTRUCTION,
-    tools=[execute_narrative_crud],
+    tools=[query_narrative_subgraph],
 )
 context_resolution_agent_2 = LlmAgent(
     name='context_resolution_agent_2',
@@ -94,7 +95,7 @@ context_resolution_agent_2 = LlmAgent(
     ),
     sub_agents=[],
     instruction=CONTEXT_RESOLUTION_AGENT_2_INSTRUCTION,
-    tools=[execute_narrative_crud],
+    tools=[query_narrative_subgraph],
 )
 graph_integration_agent = LlmAgent(
     name='graph_integration_agent',
@@ -104,7 +105,7 @@ graph_integration_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=GRAPH_INTEGRATION_AGENT_INSTRUCTION,
-    tools=[execute_narrative_crud],
+    tools=[],
 )
 validation_agent = LlmAgent(
     name='validation_agent',
@@ -114,7 +115,7 @@ validation_agent = LlmAgent(
     ),
     sub_agents=[],
     instruction=VALIDATION_AGENT_INSTRUCTION,
-    tools=[execute_narrative_crud],
+    tools=[submit_narrative_operations, get_operation_batch],
 )
 # -----------------------------------------------------------------------------
 # Root Agent

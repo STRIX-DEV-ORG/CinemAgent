@@ -1,5 +1,3 @@
-USE default;
-
 -- Drop all tables
 DROP TABLE IF EXISTS narrative_graph;
 DROP TABLE IF EXISTS entity;
@@ -15,3 +13,5 @@ DROP TABLE IF EXISTS knowledge_element;
 DROP TABLE IF EXISTS element_evidence;
 DROP TABLE IF EXISTS statement;
 DROP TABLE IF EXISTS event_effect;
+DROP TABLE IF EXISTS graph_operation;
+DROP TABLE IF EXISTS operation_batch;
