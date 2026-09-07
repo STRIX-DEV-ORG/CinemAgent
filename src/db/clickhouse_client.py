@@ -8,13 +8,17 @@ from src.config import settings
 logger = structlog.get_logger(__name__)
 
 _client: Client = None
+_client_failed: bool = False
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 def get_clickhouse_client() -> Client:
     """
     Get or create a ClickHouse client singleton.
     """
-    global _client
+    global _client, _client_failed
+    if _client_failed:
+        raise ConnectionError("ClickHouse database is offline/unreachable.")
+
     if _client is None:
         try:
             logger.info("Initializing ClickHouse client connection", 
@@ -29,11 +33,12 @@ def get_clickhouse_client() -> Client:
                 password=settings.CLICKHOUSE_PASSWORD,
                 database=settings.CLICKHOUSE_DATABASE,
                 secure=settings.CLICKHOUSE_SECURE,
-                connect_timeout=10,
-                send_receive_timeout=30
+                connect_timeout=2,
+                send_receive_timeout=5
             )
             logger.info("ClickHouse client connected successfully")
         except Exception as e:
+            _client_failed = True
             logger.error("Failed to connect to ClickHouse database", error=str(e))
             raise e
     return _client

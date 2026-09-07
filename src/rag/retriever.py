@@ -13,7 +13,11 @@ class Retriever:
     2. Knowledge Graph neighborhood querying in ClickHouse
     """
     def __init__(self):
-        self.client = get_clickhouse_client()
+        try:
+            self.client = get_clickhouse_client()
+        except Exception as e:
+            logger.warn("Retriever running in offline/disconnected mode", error=str(e))
+            self.client = None
         self.embedder = Embedder()
         self.graph_manager = GraphManager()
 
@@ -23,6 +27,8 @@ class Retriever:
         Uses native Clickhouse 'cosineDistance' calculations.
         """
         logger.info("Performing vector search", query=query_text)
+        if not self.client:
+            return []
         try:
             query_vector = self.embedder.get_embedding(query_text)
             
