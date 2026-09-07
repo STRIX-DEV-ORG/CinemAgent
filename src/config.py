@@ -1,41 +1,28 @@
 import os
-from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     # App Settings
     PORT: int = 8080
-    DEBUG: bool = False
-    ENVIRONMENT: str = "production"
-
-    # Google Cloud Settings
-    GCP_PROJECT_ID: str = ""
-    GCP_LOCATION: str = "us-central1"
 
     # API Keys
-    GEMINI_API_KEY: str = ""
-    GOOGLE_API_KEY: str = ""
-    OPENAI_API_KEY: str = ""
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
 
     # ClickHouse Settings
-    CLICKHOUSE_HOST: str = "localhost"
-    CLICKHOUSE_PORT: int = 8123  # HTTP interface port for clickhouse-connect
-    CLICKHOUSE_USER: str = "default"
-    CLICKHOUSE_PASSWORD: str = ""
-    CLICKHOUSE_DATABASE: str = "cinemagent"
-    CLICKHOUSE_SECURE: bool = False
-
-    # MCP (Model Context Protocol) Settings
-    SEARCH_MCP_URL: Optional[str] = "http://localhost:5005"
+    CLICKHOUSE_HOST: str = os.getenv("CLICKHOUSE_HOST")
+    CLICKHOUSE_PORT: int = os.getenv("CLICKHOUSE_PORT")
+    CLICKHOUSE_USER: str = os.getenv("CLICKHOUSE_USER")
+    CLICKHOUSE_SECURE: bool = os.getenv("CLICKHOUSE_SECURE")
+    CLICKHOUSE_PASSWORD: str = os.getenv("CLICKHOUSE_PASSWORD")
+    CLICKHOUSE_DATABASE: str = os.getenv("CLICKHOUSE_DATABASE")
 
     # Parallel Web Search API Settings (3rd party service)
-    PARALLEL_API_KEY: str = ""
-    PARALLEL_API_URL: str = "https://api.parallel.ai/v1"
+    PARALLEL_API_KEY: str = os.getenv("PARALLEL_API_KEY")
 
     # Narrative Graph API settings
-    NARRATIVE_API_KEY: str = ""
-    NARRATIVE_API_URL: str = "http://localhost:8080"
+    NARRATIVE_API_KEY: str = os.getenv("NARRATIVE_API_KEY")
+    NARRATIVE_API_URL: str = os.getenv("NARRATIVE_API_URL")
 
     model_config = SettingsConfigDict(
         env_file=".env",

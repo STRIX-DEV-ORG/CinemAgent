@@ -1,3 +1,4 @@
+from opentelemetry.metrics import obj
 import clickhouse_connect
 from clickhouse_connect.driver.client import Client
 from pathlib import Path
@@ -42,17 +43,6 @@ def get_clickhouse_client() -> Client:
             logger.error("Failed to connect to ClickHouse database", error=str(e))
             raise e
     return _client
-
-
-def get_clickhouse_root_client() -> Client:
-    """Return a ClickHouse client connected without selecting an application database."""
-    return clickhouse_connect.get_client(
-        host=settings.CLICKHOUSE_HOST,
-        port=settings.CLICKHOUSE_PORT,
-        username=settings.CLICKHOUSE_USER,
-        password=settings.CLICKHOUSE_PASSWORD,
-        secure=settings.CLICKHOUSE_SECURE,
-    )
 
 
 def _split_sql_statements(sql: str) -> Iterator[str]:
@@ -132,20 +122,17 @@ def init_db() -> None:
     logger.info("Starting database schema initialization...")
     try:
         # First connect without specifying database to create it if it doesn't exist
-        root_client = get_clickhouse_root_client()
+        root_client = get_clickhouse_client()
         
         # Create database
         root_client.command(f"CREATE DATABASE IF NOT EXISTS {settings.CLICKHOUSE_DATABASE}")
         logger.info(f"Database '{settings.CLICKHOUSE_DATABASE}' ready.")
 
-        # Now connect to specific database to build tables
-        client = get_clickhouse_client()
-
         # Run narrative-graph DDL in the configured application database.
-        create_schemas(client)
+        create_schemas(root_client)
         
         # Create Vector Embeddings Table
-        client.command("""
+        root_client.command("""
         CREATE TABLE IF NOT EXISTS document_chunks (
             id UUID DEFAULT generateUUIDv4(),
             document_id String,
@@ -160,7 +147,7 @@ def init_db() -> None:
         logger.info("Table 'document_chunks' initialized.")
         
         # Create Knowledge Graph Nodes Table
-        client.command("""
+        root_client.command("""
         CREATE TABLE IF NOT EXISTS kg_nodes (
             id String,
             name String,
@@ -175,7 +162,7 @@ def init_db() -> None:
         logger.info("Table 'kg_nodes' initialized.")
         
         # Create Knowledge Graph Edges Table
-        client.command("""
+        root_client.command("""
         CREATE TABLE IF NOT EXISTS kg_edges (
             id UUID DEFAULT generateUUIDv4(),
             source_id String,
@@ -242,7 +229,7 @@ def save_segment_media(
         )
         if existing.result_rows:
             updates = []
-            params: dict[str, Any] = {"id": segment_id}
+            params: dict[str, object] = {"id": segment_id}
             if image_b64:
                 updates.append("image_data = %(image_data)s")
                 updates.append("image_mime = %(image_mime)s")
@@ -327,7 +314,7 @@ def get_segment_media(
 def get_segment_all_media(
     segment_id: str,
     client: Client | None = None,
-) -> dict[str, Any] | None:
+) -> dict[str, object] | None:
     """
     Returns metadata and availability status of all media for a given source segment.
     """
