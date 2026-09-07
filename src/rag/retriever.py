@@ -27,6 +27,8 @@ class Retriever:
         Uses native Clickhouse 'cosineDistance' calculations.
         """
         logger.info("Performing vector search", query=query_text)
+        if not self.client:
+            return []
         try:
             query_vector = self.embedder.get_embedding(query_text)
             

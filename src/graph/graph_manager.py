@@ -13,7 +13,7 @@ class GraphManager:
         try:
             self.client = get_clickhouse_client()
         except Exception as e:
-            logger.warning("GraphManager running in offline/disconnected mode", error=str(e))
+            logger.warn("GraphManager running in offline/disconnected mode", error=str(e))\
             self.client = None
 
     def add_node(self, node: KGNode) -> None:
@@ -123,7 +123,7 @@ class GraphManager:
         Builds a textual representation of the sub-graph matching the query entities.
         This string context will be injected directly into the RAG system prompt.
         """
-        if not entity_names:
+        if not entity_names or not self.client:
             return "No Graph relations found."
 
         logger.info("Building subgraph context for entities", entities=entity_names)
