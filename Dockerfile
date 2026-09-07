@@ -25,7 +25,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
-ENV PYTHONPATH=/app/src
+ENV PYTHONPATH=/app
 
 # Create a non-root system user
 RUN groupadd -g 10001 appgroup && \
@@ -49,9 +49,9 @@ USER appuser
 # Document that the service listens on PORT (default 8080)
 EXPOSE 8080
 
-# Health check using FastAPI endpoint (assuming /health)
+# Health check using FastAPI endpoint (/health)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD curl --fail http://localhost:${PORT}/health || exit 1
 
 # Start the application
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "uvicorn src.main:app --host 0.0.0.0 --port ${PORT}"]

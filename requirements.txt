@@ -19,6 +19,14 @@ networkx>=3.2.1
 google-genai>=0.1.0
 openai>=1.14.0
 
+# Document & Media Generation
+reportlab>=4.0.0
+pypdf>=4.0.0
+pillow>=10.0.0
+
 # MCP (Model Context Protocol) Client Integration
 mcp>=1.0.0
 google-adk>=0.1.0
+
+# 3rd-Party Web Search Integration
+parallel-web>=1.0.0

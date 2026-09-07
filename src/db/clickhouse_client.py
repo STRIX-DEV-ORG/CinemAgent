@@ -8,13 +8,17 @@ from src.config import settings
 logger = structlog.get_logger(__name__)
 
 _client: Client = None
+_client_failed: bool = False
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 def get_clickhouse_client() -> Client:
     """
     Get or create a ClickHouse client singleton.
     """
-    global _client
+    global _client, _client_failed
+    if _client_failed:
+        raise ConnectionError("ClickHouse database is offline/unreachable.")
+
     if _client is None:
         try:
             logger.info("Initializing ClickHouse client connection", 
@@ -29,11 +33,12 @@ def get_clickhouse_client() -> Client:
                 password=settings.CLICKHOUSE_PASSWORD,
                 database=settings.CLICKHOUSE_DATABASE,
                 secure=settings.CLICKHOUSE_SECURE,
-                connect_timeout=10,
-                send_receive_timeout=30
+                connect_timeout=2,
+                send_receive_timeout=5
             )
             logger.info("ClickHouse client connected successfully")
         except Exception as e:
+            _client_failed = True
             logger.error("Failed to connect to ClickHouse database", error=str(e))
             raise e
     return _client
@@ -188,3 +193,168 @@ def init_db() -> None:
     except Exception as e:
         logger.error("Database schema initialization failed", error=str(e))
         raise e
+
+
+# -----------------------------------------------------------------------------
+# Media (Image & Audio) Storage Functions for Source Segments
+# -----------------------------------------------------------------------------
+
+def save_segment_media(
+    segment_id: str,
+    image_data: bytes | str | None = None,
+    image_mime: str = "image/png",
+    audio_data: bytes | str | None = None,
+    audio_mime: str = "audio/wav",
+    metadata: dict[str, str] | None = None,
+    client: Client | None = None,
+) -> bool:
+    """
+    Saves or updates media (image bitmaps and audio) for a specific source_segment.
+    Accepts raw binary bytes or base64-encoded strings.
+    """
+    import base64
+    ch_client = client if client is not None else get_clickhouse_client()
+
+    image_b64 = ""
+    if isinstance(image_data, bytes):
+        image_b64 = base64.b64encode(image_data).decode("utf-8")
+    elif isinstance(image_data, str):
+        image_b64 = image_data
+
+    audio_b64 = ""
+    if isinstance(audio_data, bytes):
+        audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+    elif isinstance(audio_data, str):
+        audio_b64 = audio_data
+
+    meta = metadata or {}
+    logger.info(
+        "Saving media for source_segment",
+        segment_id=segment_id,
+        has_image=bool(image_b64),
+        has_audio=bool(audio_b64)
+    )
+
+    try:
+        existing = ch_client.query(
+            "SELECT id FROM source_segment WHERE id = %(id)s",
+            parameters={"id": segment_id}
+        )
+        if existing.result_rows:
+            updates = []
+            params: dict[str, Any] = {"id": segment_id}
+            if image_b64:
+                updates.append("image_data = %(image_data)s")
+                updates.append("image_mime = %(image_mime)s")
+                params["image_data"] = image_b64
+                params["image_mime"] = image_mime
+            if audio_b64:
+                updates.append("audio_data = %(audio_data)s")
+                updates.append("audio_mime = %(audio_mime)s")
+                params["audio_data"] = audio_b64
+                params["audio_mime"] = audio_mime
+            if meta:
+                updates.append("media_metadata = %(media_metadata)s")
+                params["media_metadata"] = meta
+
+            if updates:
+                query = f"ALTER TABLE source_segment UPDATE {', '.join(updates)} WHERE id = %(id)s"
+                ch_client.command(query, parameters=params)
+            return True
+        else:
+            row = [
+                segment_id,
+                None,
+                1,
+                1,
+                "",
+                "",
+                image_b64,
+                image_mime,
+                audio_b64,
+                audio_mime,
+                meta,
+            ]
+            columns = [
+                "id", "graph_id", "chapter", "sequence", "original_text",
+                "normalized_text", "image_data", "image_mime", "audio_data",
+                "audio_mime", "media_metadata"
+            ]
+            ch_client.insert("source_segment", [row], column_names=columns)
+            return True
+    except Exception as e:
+        logger.error("Failed to save segment media to ClickHouse", segment_id=segment_id, error=str(e))
+        raise e
+
+
+def get_segment_media(
+    segment_id: str,
+    media_type: str = "image",
+    client: Client | None = None,
+) -> tuple[bytes, str] | None:
+    """
+    Retrieves media bytes and MIME type for a specific source segment.
+    media_type: 'image' or 'audio'
+    """
+    import base64
+    ch_client = client if client is not None else get_clickhouse_client()
+
+    col_data = "image_data" if media_type == "image" else "audio_data"
+    col_mime = "image_mime" if media_type == "image" else "audio_mime"
+
+    query = f"SELECT {col_data}, {col_mime} FROM source_segment WHERE id = %(id)s"
+    res = ch_client.query(query, parameters={"id": segment_id})
+    if not res.result_rows:
+        return None
+
+    raw_data, mime = res.result_rows[0]
+    if not raw_data:
+        return None
+
+    if isinstance(raw_data, str):
+        try:
+            data_bytes = base64.b64decode(raw_data)
+        except Exception:
+            data_bytes = raw_data.encode("utf-8")
+    elif isinstance(raw_data, bytes):
+        data_bytes = raw_data
+    else:
+        return None
+
+    return data_bytes, mime or ("image/png" if media_type == "image" else "audio/wav")
+
+
+def get_segment_all_media(
+    segment_id: str,
+    client: Client | None = None,
+) -> dict[str, Any] | None:
+    """
+    Returns metadata and availability status of all media for a given source segment.
+    """
+    ch_client = client if client is not None else get_clickhouse_client()
+    query = """
+    SELECT id, graph_id, chapter, sequence, 
+           length(image_data) > 0 as has_image, image_mime, length(image_data) as image_size,
+           length(audio_data) > 0 as has_audio, audio_mime, length(audio_data) as audio_size,
+           media_metadata
+    FROM source_segment 
+    WHERE id = %(id)s
+    """
+    res = ch_client.query(query, parameters={"id": segment_id})
+    if not res.result_rows:
+        return None
+
+    row = res.result_rows[0]
+    return {
+        "segment_id": str(row[0]),
+        "graph_id": str(row[1]) if row[1] else None,
+        "chapter": row[2],
+        "sequence": row[3],
+        "has_image": bool(row[4]),
+        "image_mime": row[5],
+        "image_size_bytes": row[6],
+        "has_audio": bool(row[7]),
+        "audio_mime": row[8],
+        "audio_size_bytes": row[9],
+        "media_metadata": row[10] if len(row) > 10 else {},
+    }

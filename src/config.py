@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     # API Keys
     GEMINI_API_KEY: str = ""
     GOOGLE_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
 
     # ClickHouse Settings
     CLICKHOUSE_HOST: str = "localhost"
@@ -27,6 +28,10 @@ class Settings(BaseSettings):
 
     # MCP (Model Context Protocol) Settings
     SEARCH_MCP_URL: Optional[str] = "http://localhost:5005"
+
+    # Parallel Web Search API Settings (3rd party service)
+    PARALLEL_API_KEY: str = ""
+    PARALLEL_API_URL: str = "https://api.parallel.ai/v1"
 
     # Narrative Graph API settings
     NARRATIVE_API_KEY: str = ""
