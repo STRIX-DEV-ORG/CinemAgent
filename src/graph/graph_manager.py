@@ -10,7 +10,11 @@ class GraphManager:
     Manages Knowledge Graph construction, insertion, and traversal in ClickHouse.
     """
     def __init__(self):
-        self.client = get_clickhouse_client()
+        try:
+            self.client = get_clickhouse_client()
+        except Exception as e:
+            logger.warning("GraphManager running in offline/disconnected mode", error=str(e))
+            self.client = None
 
     def add_node(self, node: KGNode) -> None:
         """

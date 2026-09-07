@@ -13,7 +13,11 @@ class Retriever:
     2. Knowledge Graph neighborhood querying in ClickHouse
     """
     def __init__(self):
-        self.client = get_clickhouse_client()
+        try:
+            self.client = get_clickhouse_client()
+        except Exception as e:
+            logger.warning("Retriever running in offline/disconnected mode", error=str(e))
+            self.client = None
         self.embedder = Embedder()
         self.graph_manager = GraphManager()
 

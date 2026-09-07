@@ -252,7 +252,13 @@ CREATE TABLE IF NOT EXISTS source_segment
     sequence UInt32,
 
     original_text String,
-    normalized_text String
+    normalized_text String,
+
+    image_data String DEFAULT '',
+    image_mime String DEFAULT 'image/png',
+    audio_data String DEFAULT '',
+    audio_mime String DEFAULT 'audio/wav',
+    media_metadata Map(String, String) DEFAULT map()
 )
 ENGINE = MergeTree()
 ORDER BY (
