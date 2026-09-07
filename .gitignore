@@ -137,3 +137,11 @@ credentials.json
 # Clickhouse local data directories (if run in dev mode locally)
 ch_data/
 docker_data/
+
+# SvelteKit client
+client/node_modules/
+client/.svelte-kit/
+client/build/
+client/.env
+client/.env.*
+!client/.env.example

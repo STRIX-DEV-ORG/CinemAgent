@@ -97,6 +97,31 @@ Use `GET /{graph_id}/operation-batches/{batch_id}` to poll write status. Use `PO
 
 ---
 
+## Writer Client
+
+The `client/` workspace is a SvelteKit + TypeScript application for writers. It uses shadcn-svelte components and presents the narrative graph as a shared creative workspace rather than a RAG-only interface. The browser calls same-origin `/api/graphs/...` routes; those SvelteKit server routes add `NARRATIVE_API_KEY` and forward requests to FastAPI, so the key is never shipped to the browser.
+
+1. Create `client/.env` from `client/.env.example` and set the FastAPI URL and narrative API key.
+2. Start the FastAPI service on port `8080`.
+3. Start the client:
+
+   ```bash
+   cd client
+   pnpm install
+   pnpm dev
+   ```
+
+The initial workspace supports creating or opening a graph, retaining recently opened graph IDs only in the browser, submitting a writer-originated `create_entity` operation, polling its materialization status, and inspecting focused graph context. Validate it with `pnpm check`, `pnpm lint`, and `pnpm build`.
+
+To containerize the client, build from the `client/` directory. Supply `FASTAPI_URL` and `NARRATIVE_API_KEY` to the running container (not as public build-time variables):
+
+```bash
+docker build -t cinemagent-client client
+docker run -p 3000:3000 -e FASTAPI_URL=http://host.docker.internal:8080 -e NARRATIVE_API_KEY=your-key cinemagent-client
+```
+
+---
+
 ## 🚀 Local Setup & Quickstart
 
 ### Prerequisites
