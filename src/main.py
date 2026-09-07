@@ -28,6 +28,7 @@ from src.agent.models import (
     InvestigatorResponse
 )
 from src.api.narrative_graph import router as narrative_graph_router
+from src.api.media import router as media_router
 
 # Setup structured logging
 structlog.configure(
@@ -64,8 +65,11 @@ async def lifespan(app: FastAPI):
         logger.error("ClickHouse startup initialization failed", error=str(e))
         
     # 2. Instantiate Orchestrator
-    orchestrator = get_orchestrator()
-    logger.info("Agent orchestrator initialized.")
+    try:
+        orchestrator = AgentOrchestrator()
+        logger.info("Agent orchestrator initialized.")
+    except Exception as e:
+        logger.warning("Agent orchestrator startup initialization deferred", error=str(e))
     
     yield
     
@@ -82,6 +86,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 app.include_router(narrative_graph_router)
+app.include_router(media_router)
 
 # Enable CORS for web frontend clients
 app.add_middleware(

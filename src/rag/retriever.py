@@ -16,7 +16,7 @@ class Retriever:
         try:
             self.client = get_clickhouse_client()
         except Exception as e:
-            logger.warn("Retriever running in offline/disconnected mode", error=str(e))
+            logger.warning("Retriever running in offline/disconnected mode", error=str(e))
             self.client = None
         self.embedder = Embedder()
         self.graph_manager = GraphManager()
