@@ -9,18 +9,7 @@ from typing import Dict, Any, Optional, Callable, Awaitable, List
 
 from src.config import settings
 from src.rag.retriever import Retriever
-# pyrefly: ignore [missing-import]
-try:
-    from src.mcp.mcp_client import MCPClientManager
-except ModuleNotFoundError:
-    class MCPClientManager:  # type: ignore[no-redef]
-        """Keeps core narrative production available when MCP is not installed."""
 
-        async def run_search(self, query: str) -> list[dict[str, Any]]:
-            return []
-
-        async def close_all(self) -> None:
-            return None
 from src.agent.prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 from src.agent.models import (
     PipelineProgressStatus,
@@ -71,7 +60,6 @@ class AgentOrchestrator:
     """
     def __init__(self):
         self.retriever = Retriever()
-        self.mcp_manager = MCPClientManager()
         self.pdf_generator = ScreenplayPDFGenerator()
         
         self.has_llm = bool(settings.GEMINI_API_KEY or getattr(settings, "OPENAI_API_KEY", ""))
@@ -147,7 +135,7 @@ class AgentOrchestrator:
                 from google import genai
                 client = genai.Client(api_key=settings.GEMINI_API_KEY)
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model=settings.GEMINI_MODEL_VERSION,
                     contents=user_input,
                     config={
                         'system_instruction': instruction,
@@ -535,7 +523,7 @@ class AgentOrchestrator:
                 from google import genai
                 client = genai.Client(api_key=settings.GEMINI_API_KEY)
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model=settings.GEMINI_MODEL_VERSION,
                     contents=prompt,
                     config={'system_instruction': SYSTEM_PROMPT}
                 )

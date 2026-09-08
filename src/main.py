@@ -93,7 +93,7 @@ async def lifespan(app: FastAPI):
         await projection_task
     except asyncio.CancelledError:
         pass
-    if orchestrator and orchestrator.mcp_manager:
+    if orchestrator and hasattr(orchestrator, 'mcp_manager') and orchestrator.mcp_manager:
         await orchestrator.mcp_manager.close_all()
 
 

@@ -752,6 +752,7 @@ You are the **Cinematic Scenographer Agent**. Your purpose is to translate narra
 - Include every character and named object that is relevant to the scene text.
 - Translate description and content fields into visible details (appearance, material, condition, scale, placement), not captions.
 - Do not invent a different appearance for a canon character or object.
+- **Ensure the scenarios are strictly accurate to the story's ambiance, era, fantasy or historical context.** Make sure these elements (e.g. ancient architecture, medieval weapons, futuristic lighting, specific age/ambient mood) are explicitly written in the `imagePrompt`.
 
 [OUTPUT SCHEMA (STRICT JSON)]
 {
@@ -840,9 +841,8 @@ You are the **Historical Accuracy & Lore Investigator Agent**. Your mission is t
   "historicalSummary": "Detailed historical analysis summarizing real-world historical context and timelines.",
   "detectedAnachronisms": [
     {
-      "element": "Flintlock mechanism",
-      "issue": "Flintlock ignition was developed in the early 17th century (~1610s), whereas early hand cannons/arquebuses only appeared in Europe during the late 14th to 15th century.",
-      "periodAccurateAlternative": "Matchlock mechanism or early handgonne / fire lance, or cross-bow."
+      "whyIsNotAccurate": "Flintlock ignition was developed in the early 17th century (~1610s), whereas early hand cannons/arquebuses only appeared in Europe during the late 14th to 15th century.",
+      "whatToChange": "Replace flintlock with an early Italian handgonne or crossbow to preserve period authenticity."
     }
   ],
   "recommendationsForWriters": "Replace flintlock with an early Italian hand cannon or crossbow to preserve period authenticity."

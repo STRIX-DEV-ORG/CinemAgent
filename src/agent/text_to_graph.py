@@ -15,12 +15,12 @@ from typing import Any, Dict
 from google.adk.agents import LlmAgent
 from google.adk.models import Gemini
 from google.genai import Client
-from google.adk.tools import agent_tool
 from google.adk import Context
 from google.adk import Workflow
 from google.adk.workflow import node
 from src.agent.tools.db_tools import generate_id_tool
 from src.agent.tools.narrative_api import query_narrative_subgraph, submit_narrative_operations, get_operation_batch
+from src.config import settings
 class GlobalGemini(Gemini):
     """Pins the Vertex AI client to the `global` location.
     gemini-3 series models are only served from `global`; the default ADK
@@ -39,7 +39,7 @@ class GlobalGemini(Gemini):
 # -----------------------------------------------------------------------------
 narrative_analyzer = LlmAgent(
     name='narrative_analyzer',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Read a segment processed by the Ingestion Agent and produce a preliminary, pre-tagged representation of its narrative components.'
     ),
@@ -49,7 +49,7 @@ narrative_analyzer = LlmAgent(
 )
 entity_resolution_agent = LlmAgent(
     name='entity_resolution_agent',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Map all mentions (pronouns, epithets, nicknames, common nouns) to unique, stable entities within the graph.'
     ),
@@ -59,7 +59,7 @@ entity_resolution_agent = LlmAgent(
 )
 event_extraction_agent = LlmAgent(
     name='event_extraction_agent',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'transform actions and happenings in the text into event structures rich in contextual, causal, and temporal relations.'
     ),
@@ -69,7 +69,7 @@ event_extraction_agent = LlmAgent(
 )
 statement_extraction_agent = LlmAgent(
     name='statement_extraction_agent',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Break down descriptions, attributes, roles, and contextual information into atomic, verifiable triples (Subject — Predicate — Object).'
     ),
@@ -79,7 +79,7 @@ statement_extraction_agent = LlmAgent(
 )
 time_resolution_agent = LlmAgent(
     name='time_resolution_agent',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Model the chronology of the story, managing relative time, intervals, and story order (diegesis vs. discourse order).'
     ),
@@ -89,7 +89,7 @@ time_resolution_agent = LlmAgent(
 )
 context_resolution_agent_2 = LlmAgent(
     name='context_resolution_agent_2',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Determine the validity or ontological origin of statements and events (discerning whether they are objective facts within the story world or subjective beliefs, lies, prophecies, rumors, or dreams).'
     ),
@@ -99,7 +99,7 @@ context_resolution_agent_2 = LlmAgent(
 )
 graph_integration_agent = LlmAgent(
     name='graph_integration_agent',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Take resolved entities, events, statements, temporal data, and context to generate an ordered list of ATOMIC GRAPH OPERATIONS.'
     ),
@@ -109,7 +109,7 @@ graph_integration_agent = LlmAgent(
 )
 validation_agent = LlmAgent(
     name='validation_agent',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Act as the final quality control gate before operations are executed or permanently persisted into the graph.'
     ),
@@ -122,7 +122,7 @@ validation_agent = LlmAgent(
 # -----------------------------------------------------------------------------
 ingestion_agent = LlmAgent(
     name='Ingestion_Agent',
-    model=GlobalGemini(model='gemini-3.5-flash'),
+    model=GlobalGemini(model=settings.GEMINI_MODEL_VERSION),
     description=(
         'Receive raw text, detect its structural hierarchy, and segment the text without interpreting or summarizing the plot.'
     ),

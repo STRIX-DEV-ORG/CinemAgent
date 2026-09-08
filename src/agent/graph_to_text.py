@@ -7,7 +7,7 @@ from google.genai import Client
 from google.adk import Context
 from google.adk import Workflow
 from google.adk.workflow import node
-
+from src.config import settings
 from src.agent.prompts import (
     GRAPH_RETRIEVAL_AGENT_INSTRUCTION,
     NARRATIVE_PLANNER_INSTRUCTION,
@@ -40,7 +40,7 @@ class GlobalGemini(Gemini):
 
 graph_retrieval_agent = LlmAgent(
     name='graph_retrieval_agent',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Queries the global knowledge graph to extract only the specific subgraph relevant to the requested story constraints, enforcing strict epistemic boundaries (preventing character knowledge leaks).'
     ),
@@ -51,7 +51,7 @@ graph_retrieval_agent = LlmAgent(
 
 narrative_planner = LlmAgent(
     name='narrative_planner',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Transforms the retrieved subgraph into a structured, high-level narrative outline (multi-act structure or plot sequence), prioritizing narrative tension, pacing, and causal flow.'
     ),
@@ -62,7 +62,7 @@ narrative_planner = LlmAgent(
 
 scene_planner = LlmAgent(
     name='scene_planner',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Deconstructs high-level narrative beats into execution-ready scene blueprints (ScenePlan), establishing settings, active characters, explicit facts to reveal or hide, and desired dramaturgical outcomes.'
     ),
@@ -73,7 +73,7 @@ scene_planner = LlmAgent(
 
 prose_writer = LlmAgent(
     name='prose_writer',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Translates a single ScenePlan into rich narrative prose while adhering strictly to provided graph facts and tracking any newly invented ornamental details.'
     ),
@@ -84,7 +84,7 @@ prose_writer = LlmAgent(
 
 style_agent = LlmAgent(
     name='style_agent',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Refines raw draft prose to enhance voice, rhythm, vocabulary, and dialogue authentic to the target genre without altering underlying facts or scene outcomes.'
     ),
@@ -95,7 +95,7 @@ style_agent = LlmAgent(
 
 narrative_consistency_agent = LlmAgent(
     name='narrative_consistency_agent',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Audits generated prose against the Knowledge Graph and Scene Plan to detect continuity errors, character perspective leaks, temporal paradoxes, or dead characters acting.'
     ),
@@ -106,7 +106,7 @@ narrative_consistency_agent = LlmAgent(
 
 graph_feedback_agent = LlmAgent(
     name='graph_feedback_agent',
-    model='gemini-2.5-flash',
+   model = settings.GEMINI_MODEL_VERSION,
     description=(
         'Analyzes novel elements introduced during prose writing (ornamental items, minor actions, new locations) and proposes formal graph mutations to keep the Knowledge Graph updated (completing the bidirectional loop).'
     ),
@@ -121,7 +121,7 @@ graph_feedback_agent = LlmAgent(
 
 story_request_interpreter = LlmAgent(
     name='Story_Request_Interpreter',
-    model=GlobalGemini(model='gemini-3.5-flash'),
+    model=GlobalGemini(model=settings.GEMINI_MODEL_VERSION),
     description=(
         'Translates informal natural language user requests into precise narrative generation constraints (StoryRequest), establishing protagonists, perspectives, scope, genre, tone, and knowledge boundaries.'
     ),

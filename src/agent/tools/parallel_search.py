@@ -77,14 +77,14 @@ async def parallel_web_search(
         raise RuntimeError(f"Parallel search API error: {str(e)}") from e
 
 
-def search_parallel_api(query: str) -> str:
+async def search_parallel_api(query: str) -> str:
     """
     ADK / Agent-compatible tool function to search via Parallel client.
     Returns JSON string with interaction details or raises error.
     """
-    client = get_parallel_client()
+    client = get_async_parallel_client()
     try:
-        task_run = client.task_run.create(
+        task_run = await client.task_run.create(
             input=query,
             processor="base"
         )

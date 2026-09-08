@@ -272,23 +272,27 @@ class ScenographerTool:
         if settings.GEMINI_API_KEY:
             try:
                 from google import genai
+                from google.genai import types
                 client = genai.Client(api_key=settings.GEMINI_API_KEY)
                 
-                # Attempt Imagen 3 generation
+                # Attempt image generation using Gemini 3
                 try:
-                    result = client.models.generate_images(
-                        model='imagen-3.0-generate-002',
-                        prompt=image_prompt,
-                        config={
-                            'number_of_images': 1,
-                            'aspect_ratio': '16:9',
-                            'output_mime_type': 'image/png'
-                        }
+                    result = client.models.generate_content(
+                        model='gemini-3-pro-image',
+                        contents=image_prompt,
+                        config=types.GenerateContentConfig(
+                            response_modalities=["IMAGE"],
+                            image_config=types.ImageConfig(
+                                aspect_ratio="16:9"
+                            )
+                        )
                     )
-                    if result.generated_images:
-                        image_bytes = result.generated_images[0].image.image_bytes
-                        with open(output_file, 'wb') as f:
-                            f.write(image_bytes)
+                    if result.candidates and result.candidates[0].content.parts:
+                        for part in result.candidates[0].content.parts:
+                            if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
+                                with open(output_file, 'wb') as f:
+                                    f.write(part.inline_data.data)
+                                break
                         return {
                             "scene_id": scene_id,
                             "image_path": output_file,
@@ -365,7 +369,7 @@ class DialogueTTSTool:
                 # Try generating content with audio modality if supported
                 try:
                     response = client.models.generate_content(
-                        model='gemini-2.0-flash',
+                        model=settings.GEMINI_MODEL_VERSION,
                         contents=f"Perform this character line as voice actor for {speaker} ({emotion}): {line}",
                         config={
                             'response_modalities': ['AUDIO']

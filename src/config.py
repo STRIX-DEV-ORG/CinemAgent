@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     NARRATIVE_API_URL: str = os.getenv("NARRATIVE_API_URL", "")
     NARRATIVE_READ_PROJECTIONS: bool = os.getenv("NARRATIVE_READ_PROJECTIONS", "false").lower() == "true"
 
+    GEMINI_MODEL_VERSION: str = "gemini-3.6-flash"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

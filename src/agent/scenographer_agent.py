@@ -3,9 +3,6 @@ import re
 import uuid
 import structlog
 from typing import Any, Dict, List, Optional
-from google.adk.agents import LlmAgent
-from google.adk import Context, Workflow
-from google.adk.workflow import node
 
 from src.config import settings
 from src.agent.prompts import SCENOGRAPHER_AGENT_INSTRUCTION
@@ -17,18 +14,6 @@ logger = structlog.get_logger(__name__)
 # -----------------------------------------------------------------------------
 # Scenographer Agent Definition
 # -----------------------------------------------------------------------------
-
-scenographer_agent = LlmAgent(
-    name='scenographer_agent',
-    model='gemini-2.5-flash',
-    description=(
-        'Translates chapter text, scene blueprints, and script prose into cinematic visual storyboard specifications and image generation prompts.'
-    ),
-    sub_agents=[],
-    instruction=SCENOGRAPHER_AGENT_INSTRUCTION,
-    tools=[],
-)
-
 
 def _parse_agent_json(result: Any) -> Any:
     if isinstance(result, str):
@@ -94,7 +79,7 @@ class ScenographerExecutor:
                 from google import genai
                 client = genai.Client(api_key=settings.GEMINI_API_KEY)
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model=settings.GEMINI_MODEL_VERSION,
                     contents=prompt,
                     config={'system_instruction': SCENOGRAPHER_AGENT_INSTRUCTION, 'temperature': 0.7}
                 )
@@ -133,7 +118,7 @@ class ScenographerExecutor:
                     "lighting": f"Moody {request.tone} chiaroscuro with volumetric lighting",
                     "colorPalette": ["#0B132B", "#1C2541", "#3A506B", "#5BC0BE", "#F8F9FA"],
                     "composition": f"Dramatic staging reflecting {scene_title}",
-                    "imagePrompt": f"Cinematic 35mm film still, masterpiece, {request.visual_style}. Depict only this exact scene, including its characters, setting, named objects, and action: {scene_text[:1600]}. Visual canon (do not contradict; make relevant details visible): {json.dumps(request.storyboard_context, ensure_ascii=False)[:1800]}. Tone: {request.tone}."
+                    "imagePrompt": f"Cinematic 35mm film still, masterpiece, {request.visual_style}. Genre and Era Context: {request.genre}. Depict only this exact scene, ensuring strict accuracy to the story's ambiance, era, fantasy or historical context. Characters, setting, named objects, and action: {scene_text[:1600]}. Visual canon (do not contradict; make relevant details visible): {json.dumps(request.storyboard_context, ensure_ascii=False)[:1800]}. Tone: {request.tone}."
                 }
             image_prompt = concept.get("imagePrompt") or f"Cinematic film still, {scene_title}, {request.tone} lighting"
             header = concept.get("header") or detected_header

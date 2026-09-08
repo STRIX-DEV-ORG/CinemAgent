@@ -25,6 +25,7 @@
 	import ToolToggle from '$lib/components/workspace/tool-toggle.svelte';
 	import NodeCreateSidebar from '$lib/components/workspace/node-create-sidebar.svelte';
 	import StoryMenu from '$lib/components/workspace/story-menu.svelte';
+	import { BrainCircuit, PenTool, ClipboardCheck, Search, Image as ImageIcon, Mic, Film, Loader2, CircleHelp } from 'lucide-svelte';
 
 	let { params } = $props();
 	let chapter = $state<StoryChapter | null>(null);
@@ -905,45 +906,71 @@
 			toggleable={false}
 			disabled={Boolean(agentRunning)}
 			onclick={() => void runAgent('analysis')}
-			>{agentRunning === 'analysis' ? '…' : '✦'}</ToolToggle
+			>{#if agentRunning === 'analysis'}<Loader2 class="size-5 animate-spin text-primary" />{:else}<BrainCircuit class="size-5 text-blue-500" />{/if}</ToolToggle
 		>
 		<ToolToggle
 			label="Suggest prose from the chapter graph"
 			toggleable={false}
 			disabled={Boolean(agentRunning)}
-			onclick={() => void runAgent('draft')}>{agentRunning === 'draft' ? '…' : '✎'}</ToolToggle
+			onclick={() => void runAgent('draft')}>{#if agentRunning === 'draft'}<Loader2 class="size-5 animate-spin text-primary" />{:else}<PenTool class="size-5 text-green-500" />{/if}</ToolToggle
 		>
 		<ToolToggle
 			label="Check continuity and graph feedback"
 			toggleable={false}
 			disabled={Boolean(agentRunning)}
-			onclick={() => void runAgent('review')}>{agentRunning === 'review' ? '…' : '✓'}</ToolToggle
+			onclick={() => void runAgent('review')}>{#if agentRunning === 'review'}<Loader2 class="size-5 animate-spin text-primary" />{:else}<ClipboardCheck class="size-5 text-purple-500" />{/if}</ToolToggle
 		>
 		<ToolToggle
 			label="Check this chapter's history, technology, customs, places, and lore for possible inconsistencies"
 			toggleable={false}
 			disabled={Boolean(agentRunning)}
 			onclick={() => void runAgent('research')}
-			>{agentRunning === 'research' ? '…' : '⌕'}</ToolToggle
+			>{#if agentRunning === 'research'}<Loader2 class="size-5 animate-spin text-primary" />{:else}<Search class="size-5 text-amber-500" />{/if}</ToolToggle
 		>
 		<ToolToggle
 			label="Generate a storyboard image"
 			toggleable={false}
 			disabled={Boolean(agentRunning)}
-			onclick={() => void runAgent('visuals')}>{agentRunning === 'visuals' ? '…' : '▧'}</ToolToggle
+			onclick={() => void runAgent('visuals')}>{#if agentRunning === 'visuals'}<Loader2 class="size-5 animate-spin text-primary" />{:else}<ImageIcon class="size-5 text-pink-500" />{/if}</ToolToggle
 		>
 		<ToolToggle
 			label="Generate dialogue audio"
 			toggleable={false}
 			disabled={Boolean(agentRunning)}
-			onclick={() => void runAgent('voice')}>{agentRunning === 'voice' ? '…' : '♬'}</ToolToggle
+			onclick={() => void runAgent('voice')}>{#if agentRunning === 'voice'}<Loader2 class="size-5 animate-spin text-primary" />{:else}<Mic class="size-5 text-cyan-500" />{/if}</ToolToggle
 		>
 		<ToolToggle
 			label="Run chapter production"
 			toggleable={false}
 			disabled={Boolean(agentRunning)}
-			onclick={() => void runAgent('produce')}>{agentRunning === 'produce' ? '…' : '▶'}</ToolToggle
+			onclick={() => void runAgent('produce')}>{#if agentRunning === 'produce'}<Loader2 class="size-5 animate-spin text-primary" />{:else}<Film class="size-5 text-rose-500" />{/if}</ToolToggle
 		>
+		<div class="mt-auto pt-4">
+			<Dialog.Root>
+				<Dialog.Trigger>
+					<Button size="icon" variant="ghost" title="How to Use" aria-label="How to Use">
+						<CircleHelp class="size-5 text-muted-foreground" />
+					</Button>
+				</Dialog.Trigger>
+				<Dialog.Content>
+					<Dialog.Header>
+						<Dialog.Title>How to Use</Dialog.Title>
+						<Dialog.Description>
+							Quick guide on formatting for the text editor.
+						</Dialog.Description>
+					</Dialog.Header>
+					<div class="space-y-4">
+						<div>
+							<h4 class="font-medium text-sm">Dialogue Format</h4>
+							<p class="text-sm text-muted-foreground mt-1">
+								For dialogue tones, you can specify them using brackets:<br />
+								<code class="bg-muted px-1 py-0.5 rounded">[character] (emotion and genre) : "dialogue"</code>
+							</p>
+						</div>
+					</div>
+				</Dialog.Content>
+			</Dialog.Root>
+		</div>
 	</aside>
 	<section class="flex min-h-0 flex-col border-r">
 		<header class="flex items-center justify-between border-b px-5 py-3">
