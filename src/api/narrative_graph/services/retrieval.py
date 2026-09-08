@@ -1,6 +1,9 @@
 """Focused narrative graph reads for agents and the writer UI."""
+import json
 from typing import Any
 from uuid import UUID
+
+from src.config import settings
 
 from ..models import SubgraphQuery
 from .common import result_rows
@@ -11,9 +14,12 @@ class SubgraphService:
     def __init__(self, client: Any, graphs: GraphService) -> None:
         self.client = client
         self.graphs = graphs
+        self.projections: Any | None = None
 
     def query_subgraph(self, graph_id: UUID, request: SubgraphQuery) -> dict[str, Any]:
         self.graphs.get_graph(graph_id)
+        if settings.NARRATIVE_READ_PROJECTIONS and self.projections and self.projections.reads_enabled(graph_id):
+            return self._projected_subgraph(graph_id, request)
         parameters: dict[str, Any] = {"graph_id": graph_id, "limit": request.limit}
         entity_filter = ""
         event_filter = ""
@@ -70,3 +76,38 @@ class SubgraphService:
         return {"graph_id": graph_id, "viewpoint_entity_id": request.viewpoint_entity_id, "entities": entities,
                 "contexts": contexts,
                 "events": events, "knowledge_elements": elements, "statements": statements, "relations": relations, "evidence": evidence}
+
+    def _projected_subgraph(self, graph_id: UUID, request: SubgraphQuery) -> dict[str, Any]:
+        """Compatibility-shaped graph read from append-only current projections."""
+        rows = result_rows(self.client.query(
+            "SELECT id, argMax(node_type, version) AS node_type, argMax(payload, version) AS payload, "
+            "argMax(is_deleted, version) AS deleted FROM narrative_node_current WHERE graph_id = {graph_id:UUID} "
+            "GROUP BY id HAVING deleted = 0 LIMIT {limit:UInt32}", parameters={"graph_id": graph_id, "limit": request.limit}
+        ))
+        nodes = {kind: [] for kind in ("entity", "event", "context", "knowledge_element")}
+        for row in rows:
+            payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else dict(row["payload"])
+            payload["id"] = row["id"]
+            if row["node_type"] in nodes:
+                nodes[row["node_type"]].append(payload)
+        relation_rows = result_rows(self.client.query(
+            "SELECT id, argMax(source_node_id, version) AS source_node_id, argMax(target_node_id, version) AS target_node_id, "
+            "argMax(relation_type, version) AS relation_type, argMax(label, version) AS label, argMax(payload, version) AS payload, "
+            "argMax(is_deleted, version) AS deleted FROM narrative_relation_current WHERE graph_id = {graph_id:UUID} "
+            "GROUP BY id HAVING deleted = 0 LIMIT {limit:UInt32}", parameters={"graph_id": graph_id, "limit": request.limit}
+        ))
+        relations = []
+        for row in relation_rows:
+            payload = json.loads(row["payload"]) if isinstance(row["payload"], str) else dict(row["payload"])
+            relations.append({**payload, "id": row["id"], "source_node_id": row["source_node_id"], "target_node_id": row["target_node_id"], "relation_type": row["relation_type"], "label": row["label"]})
+        if request.chapter_id:
+            members = result_rows(self.client.query(
+                "SELECT node_id, node_type, argMax(is_deleted, version) AS deleted FROM narrative_membership_current "
+                "WHERE graph_id = {graph_id:UUID} AND chapter_id = {chapter_id:UUID} GROUP BY node_id, node_type HAVING deleted = 0",
+                parameters={"graph_id": graph_id, "chapter_id": request.chapter_id},
+            ))
+            ids = {kind: {str(row["node_id"]) for row in members if row["node_type"] == kind} for kind in (*nodes.keys(), "relation")}
+            for kind in nodes:
+                nodes[kind] = [node for node in nodes[kind] if str(node["id"]) in ids[kind]]
+            relations = [relation for relation in relations if str(relation["id"]) in ids["relation"]]
+        return {"graph_id": graph_id, "viewpoint_entity_id": request.viewpoint_entity_id, "entities": nodes["entity"], "contexts": nodes["context"], "events": nodes["event"], "knowledge_elements": nodes["knowledge_element"], "statements": [], "relations": relations, "evidence": []}

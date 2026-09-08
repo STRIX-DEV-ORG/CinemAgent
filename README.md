@@ -71,6 +71,8 @@ Configuration is loaded from environment variables or a local `.env` file. Key v
 | `GEMINI_API_KEY` | API Key for Gemini Models (Google GenAI) | `""` |
 | `PORT` | Listening port for the application | `8080` |
 | `NARRATIVE_API_KEY` | Bearer token required by narrative graph endpoints | `""` |
+| `NARRATIVE_ADMIN_API_KEY` | Separate bearer token for projection replay and diagnostics | Falls back to `NARRATIVE_API_KEY` |
+| `NARRATIVE_READ_PROJECTIONS` | Read chapter state from event-derived projections after parity checks | `false` |
 
 ---
 
@@ -94,6 +96,18 @@ curl -X POST "http://localhost:8080/v1/narrative-graphs/GRAPH_UUID/operation-bat
 ```
 
 Use `GET /{graph_id}/operation-batches/{batch_id}` to poll write status. Use `POST /{graph_id}/subgraph:query` with entity/event anchors and an optional `viewpoint_entity_id` to obtain the restricted graph context used by retrieval and generation agents.
+
+### ClickHouse narrative projections
+
+Writer changes are appended to `narrative_event`; a checkpointed projector builds versioned chapter, node, relation, and membership read models. It resumes safely after restarts and can run in-process or as a dedicated worker:
+
+```bash
+python -m src.narrative_projector
+```
+
+Deploy this worker separately from the API in Cloud Run using `Dockerfile.projector`; it uses the same ClickHouse checkpoint table and is safe to restart. Deleted stories are hidden immediately, restorable for 30 days through `POST /{graph_id}:restore`, and then purged by the worker.
+
+Before enabling `NARRATIVE_READ_PROJECTIONS=true`, an administrator should bootstrap existing stories and compare projected reads with the legacy tables. The protected endpoints `POST /{graph_id}/diagnostics/projection:bootstrap`, `POST /{graph_id}/diagnostics/projection:replay`, and `GET /{graph_id}/diagnostics/projection` support that migration. `GET /diagnostics/clickhouse` exposes developer-only projection, storage, and query-telemetry health.
 
 ---
 

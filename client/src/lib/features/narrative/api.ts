@@ -8,7 +8,12 @@ import type {
 	TextProposal,
 	AgentGroup,
 	AgentRun,
-	TipTapDocument
+	TipTapDocument,
+	StoryHealth,
+	CharacterPresence,
+	RelationTimelineItem,
+	IntelligenceMetrics,
+	NarrativeHistoryEvent
 } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -432,5 +437,16 @@ export const workspaceApi = {
 				headers: { 'content-type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
 				body: JSON.stringify({ accepted_ids })
 			}
+		),
+	backfillSemanticIndex: (graphId: string) =>
+		request<{ status: string; message: string }>(workspacePath(graphId, '/semantic-index:backfill'), { method: 'POST' }),
+	storyHealth: (graphId: string) => request<StoryHealth>(workspacePath(graphId, '/intelligence/story-health')),
+	characterPresence: (graphId: string) => request<CharacterPresence[]>(workspacePath(graphId, '/intelligence/character-presence')),
+	relationTimeline: (graphId: string) => request<RelationTimelineItem[]>(workspacePath(graphId, '/intelligence/relation-timeline')),
+	intelligenceMetrics: (graphId: string) => request<IntelligenceMetrics>(workspacePath(graphId, '/intelligence/metrics')),
+	events: (graphId: string) => request<NarrativeHistoryEvent[]>(workspacePath(graphId, '/events?limit=20')),
+	semanticSearch: (graphId: string, query: string) =>
+		request<Array<{ source_type: string; source_id: string; chapter_id: string | null; content: string; metadata: Record<string, unknown>; distance: number; destination?: { kind: 'chapter' | 'node'; chapter_id: string | null; node_id?: string; node_type?: string } }>>(
+			workspacePath(graphId, `/semantic-search?query=${encodeURIComponent(query)}`)
 		)
 };

@@ -28,6 +28,7 @@ from src.agent.models import (
     InvestigatorResponse
 )
 from src.api.narrative_graph import router as narrative_graph_router
+from src.api.narrative_graph.service import NarrativeGraphService
 from src.api.media import router as media_router
 
 # Setup structured logging
@@ -71,10 +72,27 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Agent orchestrator startup initialization deferred", error=str(e))
     
+    async def projection_loop() -> None:
+        """Resume event projection after restarts; checkpoints make retries safe."""
+        while True:
+            try:
+                await asyncio.to_thread(NarrativeGraphService().projections.project_pending)
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                logger.warning("Narrative projection pass failed", error=str(error))
+            await asyncio.sleep(3)
+
+    projection_task = asyncio.create_task(projection_loop())
     yield
     
     # Shutdown actions
     logger.info("Shutting down CinemAgent...")
+    projection_task.cancel()
+    try:
+        await projection_task
+    except asyncio.CancelledError:
+        pass
     if orchestrator and orchestrator.mcp_manager:
         await orchestrator.mcp_manager.close_all()
 

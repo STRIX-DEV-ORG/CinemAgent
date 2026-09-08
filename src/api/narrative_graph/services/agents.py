@@ -29,6 +29,7 @@ class AgentRunService:
         self.client = client
         self.workspace = workspace
         self.graphs = graphs
+        self.intelligence: Any | None = None
 
     def _chapter_voice_cast(self, graph_id: UUID, chapter_id: UUID) -> tuple[dict[str, str], dict[str, str]]:
         """Return stable voice presets and entity IDs for chapter characters."""
@@ -102,6 +103,9 @@ class AgentRunService:
             [[run_id, graph_id, request.chapter_id, request.agent_group, request.scope, json.dumps(payload, default=str), "queued", 0, "Queued", None, json.dumps({})]],
             column_names=["id", "graph_id", "chapter_id", "agent_group", "scope", "input", "status", "progress", "message", "error", "result"],
         )
+        if self.intelligence:
+            self.intelligence.append_event(graph_id, "agent_run_queued", actor_type="agent", chapter_id=request.chapter_id,
+                                           operation_id=run_id, payload={"agent_group": request.agent_group, "scope": request.scope})
         return self.get(graph_id, run_id)
 
     def _row(self, graph_id: UUID, run_id: UUID) -> dict[str, Any]:
@@ -176,6 +180,9 @@ class AgentRunService:
             [[row["id"], row["graph_id"], row.get("chapter_id"), row["agent_group"], row["scope"], json.dumps(row.get("input", {}), default=str), status, progress, message, error, json.dumps(result if result is not None else row.get("result", {}), default=str)]],
             column_names=["id", "graph_id", "chapter_id", "agent_group", "scope", "input", "status", "progress", "message", "error", "result"],
         )
+        if self.intelligence:
+            self.intelligence.append_event(row["graph_id"], "agent_run_updated", actor_type="agent", chapter_id=row.get("chapter_id"),
+                                           operation_id=row["id"], version=progress, payload={"agent_group": row["agent_group"], "scope": row["scope"], "status": status, "progress": progress, "message": message, "error": error})
 
     async def execute(self, graph_id: UUID, run_id: UUID) -> None:
         row = self._row(graph_id, run_id)

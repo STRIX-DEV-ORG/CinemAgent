@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
+from src.config import settings
 
 from ..models import (
     ChapterAnalysisResponse,
@@ -24,6 +25,21 @@ class WorkspaceService:
     def __init__(self, client: Any, graphs: GraphService) -> None:
         self.client = client
         self.graphs = graphs
+        self.intelligence: Any | None = None
+        self.projections: Any | None = None
+
+    def _event(self, graph_id: UUID, event_type: str, chapter: ChapterResponse, payload: dict[str, Any] | None = None) -> None:
+        if self.intelligence:
+            snapshot = {
+                "id": str(chapter.id), "title": chapter.title, "sequence": chapter.sequence,
+                "document_json": json.dumps(chapter.document), "plain_text": chapter.plain_text,
+                "revision": chapter.revision,
+            }
+            snapshot.update(payload or {})
+            self.intelligence.append_event(graph_id, event_type, actor_type="writer", chapter_id=chapter.id,
+                                           version=chapter.revision, payload=snapshot)
+            if self.projections:
+                self.projections.project_graph(graph_id)
 
     @staticmethod
     def _chapter(row: dict[str, Any]) -> ChapterResponse:
@@ -39,6 +55,17 @@ class WorkspaceService:
 
     def list_chapters(self, graph_id: UUID) -> list[ChapterResponse]:
         self.graphs.get_graph(graph_id)
+        if settings.NARRATIVE_READ_PROJECTIONS and self.projections and self.projections.reads_enabled(graph_id):
+            result = self.client.query(
+                "SELECT id, argMax(graph_id, revision) AS chapter_graph_id, argMax(title, revision) AS title, "
+                "argMax(sequence, revision) AS sequence, argMax(document_json, revision) AS document_json, "
+                "argMax(plain_text, revision) AS plain_text, max(revision) AS latest_revision, "
+                "min(updated_at) AS created_at, argMax(updated_at, revision) AS updated_at, "
+                "argMax(is_deleted, revision) AS is_deleted "
+                "FROM narrative_chapter_current WHERE graph_id = {graph_id:UUID} GROUP BY id HAVING is_deleted = 0 ORDER BY sequence, id",
+                parameters={"graph_id": graph_id},
+            )
+            return [self._chapter(row) for row in result_rows(result)]
         result = self.client.query(
             "SELECT id, "
             "argMax(graph_id, revision) AS chapter_graph_id, "
@@ -56,6 +83,18 @@ class WorkspaceService:
         return [self._chapter(row) for row in result_rows(result)]
 
     def get_chapter(self, graph_id: UUID, chapter_id: UUID) -> ChapterResponse:
+        if settings.NARRATIVE_READ_PROJECTIONS and self.projections and self.projections.reads_enabled(graph_id):
+            rows = result_rows(self.client.query(
+                "SELECT id, argMax(graph_id, revision) AS graph_id, argMax(title, revision) AS title, "
+                "argMax(sequence, revision) AS sequence, argMax(document_json, revision) AS document_json, "
+                "argMax(plain_text, revision) AS plain_text, max(revision) AS latest_revision, "
+                "min(updated_at) AS created_at, argMax(updated_at, revision) AS updated_at, argMax(is_deleted, revision) AS is_deleted "
+                "FROM narrative_chapter_current WHERE graph_id = {graph_id:UUID} AND id = {chapter_id:UUID} GROUP BY id HAVING is_deleted = 0",
+                parameters={"graph_id": graph_id, "chapter_id": chapter_id},
+            ))
+            if not rows:
+                raise HTTPException(status_code=404, detail="chapter not found")
+            return self._chapter(rows[0])
         result = self.client.query(
             "SELECT id, graph_id, title, sequence, document_json, plain_text, revision, created_at, updated_at "
             "FROM story_chapter WHERE graph_id = {graph_id:UUID} AND id = {chapter_id:UUID} ORDER BY revision DESC LIMIT 1",
@@ -76,7 +115,9 @@ class WorkspaceService:
             [[chapter_id, graph_id, request.title, sequence, json.dumps(document), "", 1]],
             column_names=["id", "graph_id", "title", "sequence", "document_json", "plain_text", "revision"],
         )
-        return self.get_chapter(graph_id, chapter_id)
+        chapter = self.get_chapter(graph_id, chapter_id)
+        self._event(graph_id, "chapter_created", chapter)
+        return chapter
 
     def delete_chapter(self, graph_id: UUID, chapter_id: UUID) -> None:
         chapters = self.list_chapters(graph_id)
@@ -109,6 +150,7 @@ class WorkspaceService:
                 ],
                 column_names=["id", "graph_id", "title", "sequence", "document_json", "plain_text", "revision"],
             )
+        self._event(graph_id, "chapter_deleted", chapter, {"title": chapter.title, "sequence": chapter.sequence})
 
     def reorder_chapters(self, graph_id: UUID, request: ChapterOrderUpdate) -> list[ChapterResponse]:
         chapters = self.list_chapters(graph_id)
@@ -124,7 +166,10 @@ class WorkspaceService:
             ],
             column_names=["id", "graph_id", "title", "sequence", "document_json", "plain_text", "revision"],
         )
-        return self.list_chapters(graph_id)
+        updated = self.list_chapters(graph_id)
+        for chapter in updated:
+            self._event(graph_id, "chapter_reordered", chapter)
+        return updated
 
     def update_chapter(self, graph_id: UUID, chapter_id: UUID, request: ChapterUpdate) -> ChapterResponse:
         chapter = self.get_chapter(graph_id, chapter_id)
@@ -135,7 +180,9 @@ class WorkspaceService:
             [[chapter.id, graph_id, title, sequence, json.dumps(chapter.document), chapter.plain_text, chapter.revision + 1]],
             column_names=["id", "graph_id", "title", "sequence", "document_json", "plain_text", "revision"],
         )
-        return self.get_chapter(graph_id, chapter_id)
+        updated = self.get_chapter(graph_id, chapter_id)
+        self._event(graph_id, "chapter_updated", updated)
+        return updated
 
     def update_document(self, graph_id: UUID, chapter_id: UUID, request: ChapterDocumentUpdate) -> ChapterResponse:
         chapter = self.get_chapter(graph_id, chapter_id)
@@ -146,7 +193,9 @@ class WorkspaceService:
             [[chapter.id, graph_id, chapter.title, chapter.sequence, json.dumps(request.document), request.plain_text, chapter.revision + 1]],
             column_names=["id", "graph_id", "title", "sequence", "document_json", "plain_text", "revision"],
         )
-        return self.get_chapter(graph_id, chapter_id)
+        updated = self.get_chapter(graph_id, chapter_id)
+        self._event(graph_id, "chapter_text_updated", updated, {"title": updated.title, "revision": updated.revision, "plain_text": updated.plain_text})
+        return updated
 
     def start_analysis(self, graph_id: UUID, chapter_id: UUID) -> ChapterAnalysisResponse:
         chapter = self.get_chapter(graph_id, chapter_id)

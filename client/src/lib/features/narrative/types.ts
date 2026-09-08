@@ -113,6 +113,48 @@ export type OperationBatch = {
 	error: string | null;
 };
 export type NarrativeRecord = Record<string, unknown>;
+export type StoryHealth = {
+	graph_id: string;
+	chapters: number;
+	nodes: number;
+	relations: number;
+	isolated_nodes_estimate: number;
+	unresolved_assumptions: number;
+	evidence_count: number;
+	evidence_coverage: number;
+};
+export type CharacterPresence = {
+	chapter_id: string;
+	chapter_title: string;
+	chapter_sequence: number;
+	entity_id: string;
+	name: string;
+	type: string;
+};
+export type RelationTimelineItem = {
+	id: string;
+	chapter_id: string;
+	chapter_title: string;
+	chapter_sequence: number;
+	source_node_id: string;
+	target_node_id: string;
+	relation_type: string;
+	label: string;
+	description: string;
+	status: string;
+};
+export type IntelligenceMetrics = {
+	activity: Array<{ day: string; event_type: string; event_count: number }>;
+	agent_runs: Array<{ agent_group: string; status: string; count: number }>;
+	embeddings: Array<{ source_type: string; count: number }>;
+};
+export type NarrativeHistoryEvent = {
+	event_id: string;
+	event_type: string;
+	actor_type: string;
+	chapter_id: string | null;
+	occurred_at: string;
+};
 export type Subgraph = {
 	graph_id: string;
 	viewpoint_entity_id: string | null;

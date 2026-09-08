@@ -33,6 +33,7 @@ class OperationBatchService:
     def __init__(self, client: Any, graphs: GraphService) -> None:
         self.client = client
         self.graphs = graphs
+        self.intelligence: Any | None = None
 
     def _validate_batch(self, graph_id: UUID, batch: OperationBatchCreate) -> None:
         self.graphs.get_graph(graph_id)
@@ -96,6 +97,23 @@ class OperationBatchService:
             "graph_operation", operation_rows,
             column_names=["id", "batch_id", "graph_id", "sequence", "operation_type", "payload", "provenance", "origin", "status", "error"],
         )
+        # The operation journal remains API-compatible, while every accepted
+        # operation is also emitted into the immutable ClickHouse event stream.
+        if self.intelligence:
+            for sequence, item in enumerate(batch.operations, start=1):
+                metadata = item.payload.get("metadata")
+                chapter_id = item.payload.get("chapter_id") or (metadata.get("chapter_id") if isinstance(metadata, dict) else None)
+                self.intelligence.append_event(
+                    graph_id,
+                    item.operation_type.value,
+                    actor_type=item.origin,
+                    chapter_id=UUID(str(chapter_id)) if chapter_id else None,
+                    batch_id=batch_id,
+                    operation_id=item.id,
+                    version=sequence,
+                    payload=item.payload,
+                    provenance=item.provenance,
+                )
         return OperationBatchResponse(id=batch_id, graph_id=graph_id, status="accepted", operation_count=len(batch.operations))
 
     def get_batch(self, graph_id: UUID, batch_id: UUID) -> OperationBatchResponse:
