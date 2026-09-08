@@ -89,6 +89,18 @@ class ScenographerRequest(BaseModel):
     tone: Optional[str] = Field(default="atmospheric", description="Lighting / mood tone e.g. chiaroscuro, golden hour, neon noir")
     visual_style: Optional[str] = Field(default="Cinematic 35mm film still, anamorphic lens, masterpiece", description="Visual styling directives")
     aspect_ratio: Optional[str] = Field(default="16:9", description="Aspect ratio of the generated storyboard image")
+    storyboard_context: Dict[str, Any] = Field(default_factory=dict, description="Canonical character, setting, object, and fact details from the narrative graph")
+
+
+class StoryboardScene(BaseModel):
+    scene_id: str
+    title: str
+    header: str
+    excerpt: str
+    visual_concept: Dict[str, Any]
+    image_path: Optional[str] = None
+    image_url: Optional[str] = None
+    rendered_prompt: str
 
 
 class ScenographerResponse(BaseModel):
@@ -99,6 +111,7 @@ class ScenographerResponse(BaseModel):
     image_path: Optional[str] = None
     image_url: Optional[str] = None
     rendered_prompt: str
+    scenes: List[StoryboardScene] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -107,6 +120,7 @@ class DialogerRequest(BaseModel):
     chapter_title: Optional[str] = Field(default="Dialogue Track", description="Title of the scene/chapter")
     segment_ids: List[str] = Field(default_factory=list, description="Optional segment IDs")
     character_hints: Optional[Dict[str, str]] = Field(default=None, description="Optional map of Character Name to Voice Name (e.g. {'Elena': 'Aoede', 'Marcus': 'Fenrir'})")
+    character_entity_ids: Optional[Dict[str, str]] = Field(default=None, description="Optional map of character names to their narrative graph entity IDs")
     emotion_hint: Optional[str] = Field(default=None, description="Overall emotional directive e.g. 'tense whisper', 'confrontational'")
 
 

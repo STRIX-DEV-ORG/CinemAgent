@@ -23,9 +23,27 @@ export async function proxyNarrativeRequest(
 	}
 }
 
+/** Proxy generated media without requiring the narrative API key in the browser. */
+export async function proxyMediaRequest(
+	fetcher: typeof fetch,
+	path: string,
+	init: RequestInit = {}
+): Promise<Response> {
+	try {
+		return await fetcher(backendUrl(path), {
+			...init,
+			headers: { Accept: '*/*', ...init.headers }
+		});
+	} catch {
+		error(502, 'The media server is unavailable');
+	}
+}
+
 export function forwardResponse(response: Response): Response {
 	const headers = new Headers();
-	const contentType = response.headers.get('content-type');
-	if (contentType) headers.set('content-type', contentType);
+	for (const name of ['content-type', 'content-length', 'content-range', 'accept-ranges']) {
+		const value = response.headers.get(name);
+		if (value) headers.set(name, value);
+	}
 	return new Response(response.body, { status: response.status, headers });
 }

@@ -4,8 +4,9 @@
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import { narrativeApi, workspaceApi } from '$lib/features/narrative/api';
-	import { loadRecentGraphs, rememberGraph } from '$lib/features/narrative/recent-graphs';
+	import { forgetGraph, loadRecentGraphs, rememberGraph } from '$lib/features/narrative/recent-graphs';
 	import type { NarrativeGraph, StoryChapter } from '$lib/features/narrative/types';
 
 	let { graphId, compact = false }: { graphId?: string; compact?: boolean } = $props();
@@ -15,6 +16,9 @@
 	let error = $state('');
 	let recent = $state<NarrativeGraph[]>([]);
 	let fileInput = $state<HTMLInputElement>();
+	let deleteDialogOpen = $state(false);
+	let deleting = $state(false);
+	let menuElement = $state<HTMLElement>();
 
 	onMount(() => {
 		recent = loadRecentGraphs();
@@ -110,9 +114,36 @@
 			if (fileInput) fileInput.value = '';
 		}
 	}
+
+	async function deleteStory() {
+		if (!graphId) return;
+		deleting = true;
+		try {
+			await narrativeApi.deleteGraph(graphId);
+			// Update this open menu directly, then persist the same removal. This
+			// avoids retaining a stale entry when a UUID's casing differs from the
+			// value originally stored by an earlier client version.
+			const deletedId = String(graphId).toLowerCase();
+			recent = recent.filter((story) => String(story.id).toLowerCase() !== deletedId);
+			forgetGraph(graphId);
+			deleteDialogOpen = false;
+			open = false;
+			await goto(resolve('/'));
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : 'Could not delete story.';
+		} finally {
+			deleting = false;
+		}
+	}
+
+	function closeOnOutsideClick(event: MouseEvent) {
+		if (open && menuElement && !menuElement.contains(event.target as Node)) open = false;
+	}
 </script>
 
-<div class="relative flex justify-center">
+<svelte:window onclick={closeOnOutsideClick} />
+
+<div class="relative flex justify-center" bind:this={menuElement}>
 	<Button
 		size={compact ? 'icon' : 'sm'}
 		variant="outline"
@@ -165,6 +196,29 @@
 					onchange={(event) => void importStory(event)}
 				/>
 			</div>
+			{#if graphId}<Button
+					class="mt-2 w-full"
+					size="sm"
+					variant="destructive"
+					disabled={busy}
+					onclick={() => (deleteDialogOpen = true)}>Delete current story</Button
+			>{/if}
 			{#if error}<p class="mt-2 text-xs text-destructive">{error}</p>{/if}
 		</section>{/if}
 </div>
+
+<Dialog.Root bind:open={deleteDialogOpen}>
+	<Dialog.Content>
+		<Dialog.Header>
+			<Dialog.Title>Delete this story?</Dialog.Title>
+			<Dialog.Description>
+				This permanently removes the story, its chapters, graph nodes, relations, AI runs, and saved artifacts.
+				This cannot be undone.
+			</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer>
+			<Button variant="outline" disabled={deleting} onclick={() => (deleteDialogOpen = false)}>Cancel</Button>
+			<Button variant="destructive" disabled={deleting} onclick={() => void deleteStory()}>{deleting ? 'Deleting…' : 'Delete story'}</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     PORT: int = 8080
 
     # API Keys
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
     # ClickHouse Settings
     CLICKHOUSE_HOST: str = os.getenv("CLICKHOUSE_HOST")
@@ -18,11 +18,11 @@ class Settings(BaseSettings):
     CLICKHOUSE_DATABASE: str = os.getenv("CLICKHOUSE_DATABASE")
 
     # Parallel Web Search API Settings (3rd party service)
-    PARALLEL_API_KEY: str = os.getenv("PARALLEL_API_KEY")
+    PARALLEL_API_KEY: str = os.getenv("PARALLEL_API_KEY", "")
 
     # Narrative Graph API settings
     NARRATIVE_API_KEY: str = os.getenv("NARRATIVE_API_KEY")
-    NARRATIVE_API_URL: str = os.getenv("NARRATIVE_API_URL")
+    NARRATIVE_API_URL: str = os.getenv("NARRATIVE_API_URL", "")
 
     model_config = SettingsConfigDict(
         env_file=".env",

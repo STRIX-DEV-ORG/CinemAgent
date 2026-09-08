@@ -10,7 +10,17 @@ from typing import Dict, Any, Optional, Callable, Awaitable, List
 from src.config import settings
 from src.rag.retriever import Retriever
 # pyrefly: ignore [missing-import]
-from src.mcp.mcp_client import MCPClientManager
+try:
+    from src.mcp.mcp_client import MCPClientManager
+except ModuleNotFoundError:
+    class MCPClientManager:  # type: ignore[no-redef]
+        """Keeps core narrative production available when MCP is not installed."""
+
+        async def run_search(self, query: str) -> list[dict[str, Any]]:
+            return []
+
+        async def close_all(self) -> None:
+            return None
 from src.agent.prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 from src.agent.models import (
     PipelineProgressStatus,
@@ -64,7 +74,7 @@ class AgentOrchestrator:
         self.mcp_manager = MCPClientManager()
         self.pdf_generator = ScreenplayPDFGenerator()
         
-        self.has_llm = bool(settings.GEMINI_API_KEY or settings.OPENAI_API_KEY)
+        self.has_llm = bool(settings.GEMINI_API_KEY or getattr(settings, "OPENAI_API_KEY", ""))
         if not self.has_llm:
             logger.warn("No API Keys configured for Gemini or OpenAI. The agent will run with simulated/mock agent responses.")
 

@@ -3,7 +3,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Accordion } from '$lib/components/ui/accordion';
-	import { entityTypeOptions } from '$lib/features/narrative/node-options';
+	import { contextTypeOptions, entityTypeOptions, eventTypeOptions } from '$lib/features/narrative/node-options';
 
 	type NodeKind = 'entity' | 'event' | 'context' | 'assumption';
 
@@ -31,6 +31,7 @@
 	let status = $state('active');
 	let aliases = $state('');
 	let description = $state('');
+	let content = $state('');
 	let holderEntityId = $state('');
 	let elementType = $state('assumption');
 	let origin = $state('writer');
@@ -50,12 +51,7 @@
 	}
 
 	function submit() {
-		const required =
-			kind === 'assumption'
-				? elementType.trim()
-				: kind === 'context'
-					? type.trim()
-					: name.trim() && type.trim();
+		const required = name.trim() && (kind === 'assumption' ? elementType.trim() : type.trim());
 		if (!required) {
 			error = 'Complete the required fields before creating this node.';
 			return;
@@ -74,6 +70,7 @@
 				.map((alias) => alias.trim())
 				.filter(Boolean),
 			description: description.trim(),
+			content: content.trim(),
 			holder_entity_id: holderEntityId.trim() || null,
 			element_type: elementType.trim(),
 			origin: origin.trim() || 'writer',
@@ -118,12 +115,12 @@
 		</select>
 	</label>
 	<div class="mt-4 grid gap-4">
-		{#if kind === 'entity' || kind === 'event'}<label class="grid gap-1 text-sm"
+		<label class="grid gap-1 text-sm"
 				>Name <span class="text-destructive">*</span><Input
 					bind:value={name}
-					placeholder={kind === 'entity' ? 'e.g. Mara Voss' : 'e.g. The arrival'}
+					placeholder={kind === 'entity' ? 'e.g. Mara Voss' : kind === 'context' ? 'e.g. Winter Court' : kind === 'event' ? 'e.g. The arrival' : 'e.g. The hidden oath'}
 				/></label
-			>{/if}
+			>
 		{#if kind === 'entity'}<label class="grid gap-1 text-sm"
 				>Entity type <span class="text-destructive">*</span><select
 					class="h-9 rounded-md border bg-background px-2"
@@ -131,9 +128,14 @@
 					>{#each entityTypeOptions as option}<option value={option.value}>{option.label}</option
 						>{/each}</select
 				></label
-			>{:else if kind !== 'assumption'}<label class="grid gap-1 text-sm"
-				>{kind === 'context' ? 'Context type' : 'Type'}
-				<span class="text-destructive">*</span><Input bind:value={type} /></label
+			>{:else if kind === 'event'}<label class="grid gap-1 text-sm"
+				>Event type <span class="text-destructive">*</span><select class="h-9 rounded-md border bg-background px-2" bind:value={type}
+					>{#each eventTypeOptions as option}<option value={option.value}>{option.label}</option>{/each}</select
+				></label
+			>{:else if kind === 'context'}<label class="grid gap-1 text-sm"
+				>Context type <span class="text-destructive">*</span><select class="h-9 rounded-md border bg-background px-2" bind:value={type}
+					>{#each contextTypeOptions as option}<option value={option.value}>{option.label}</option>{/each}</select
+				></label
 			>{/if}
 		{#if kind !== 'context'}<label class="grid gap-1 text-sm"
 				>Status<select class="h-9 rounded-md border bg-background px-2" bind:value={status}
@@ -146,6 +148,12 @@
 				>Aliases <span class="text-xs text-muted-foreground">(optional, comma separated)</span
 				><Input bind:value={aliases} placeholder="e.g. The Captain, M. Voss" /></label
 			>{/if}
+		<label class="grid gap-1 text-sm"
+				>Content <span class="text-xs text-muted-foreground">(what this node says or contains)</span><Textarea
+					bind:value={content}
+					placeholder="The important story detail, fact, or scene information"
+				/></label
+			>
 		{#if kind === 'entity' || kind === 'event' || kind === 'context' || kind === 'assumption'}<label
 				class="grid gap-1 text-sm"
 				>Description <span class="text-xs text-muted-foreground">(optional)</span><Textarea

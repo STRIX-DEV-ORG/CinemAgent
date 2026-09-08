@@ -13,33 +13,45 @@
 
 	let {
 		chapters,
-		onselect
-	}: { chapters: StoryChapter[]; onselect: (chapter: StoryChapter) => void } = $props();
+		onselect,
+		onreorder
+	}: {
+		chapters: StoryChapter[];
+		onselect: (chapter: StoryChapter) => void;
+		onreorder: (chapterIds: string[]) => void;
+	} = $props();
 	const nodeTypes = { narrative: GraphNode };
-	let nodes = $derived<Node[]>(
-		chapters.map((chapter, index) => ({
+	let nodes = $state.raw<Node[]>([]);
+	let edges = $state.raw<Edge[]>([]);
+	function rebuild() {
+		nodes = chapters.map((chapter, index) => ({
 			id: chapter.id,
 			type: 'narrative',
 			position: { x: index * 240, y: 120 },
-			data: { label: `${chapter.sequence}. ${chapter.title}`, kind: 'chapter', record: chapter }
-		}))
-	);
-	let edges = $derived<Edge[]>(
-		chapters.slice(1).map((chapter, index) => ({
+			data: { label: `${chapter.sequence}. ${chapter.title}`, kind: 'chapter', record: chapter, connectable: false }
+		}));
+		edges = chapters.slice(1).map((chapter, index) => ({
 			id: `${chapters[index].id}-${chapter.id}`,
 			source: chapters[index].id,
 			target: chapter.id,
 			type: 'smoothstep'
-		}))
-	);
+		}));
+	}
+	$effect(rebuild);
+	function reorderFromCanvas() {
+		const order = [...nodes].sort((left, right) => left.position.x - right.position.x).map((node) => node.id);
+		if (order.some((id, index) => id !== chapters[index]?.id)) onreorder(order);
+	}
 </script>
 
 <div class="h-full min-h-96 overflow-hidden rounded-xl border bg-muted/20">
 	<SvelteFlow
-		{nodes}
-		{edges}
+		bind:nodes
+		bind:edges
 		{nodeTypes}
 		fitView
+		nodesConnectable={false}
+		onnodedragstop={reorderFromCanvas}
 		onnodeclick={(event) => onselect(event.node.data.record as StoryChapter)}
 	>
 		<Controls />
