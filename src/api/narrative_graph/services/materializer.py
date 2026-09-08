@@ -74,10 +74,10 @@ class OperationMaterializer:
             node_type = payload["node_type"]
             table = node_type
             allowed_by_type = {
-                "entity": {"name", "type", "status", "description", "confidence", "aliases", "metadata"},
-                "event": {"name", "type", "status", "description", "confidence", "metadata", "time_id"},
-                "context": {"type", "description", "holder_entity_id", "confidence", "metadata"},
-                "knowledge_element": {"time_id", "context_id", "element_type", "description", "origin", "status", "confidence", "metadata"},
+                "entity": {"name", "type", "status", "description", "content", "confidence", "aliases", "metadata"},
+                "event": {"name", "type", "status", "description", "content", "confidence", "metadata", "time_id"},
+                "context": {"name", "type", "description", "content", "holder_entity_id", "confidence", "metadata"},
+                "knowledge_element": {"name", "time_id", "context_id", "element_type", "description", "content", "origin", "status", "confidence", "metadata"},
             }
             changes = payload["changes"]
             if not set(changes).issubset(allowed_by_type[node_type]):
@@ -99,6 +99,44 @@ class OperationMaterializer:
                 return
             assignments = ", ".join(f"{key} = {self._literal(value)}" for key, value in changes.items())
             self.client.command(f"ALTER TABLE {table} UPDATE {assignments} WHERE id = {self._literal(payload['id'])}")
+            return
+        if operation_type == OperationType.UPDATE_RELATION:
+            changes = payload["changes"]
+            allowed = {"source_node_id", "target_node_id", "label", "description", "status", "confidence", "metadata"}
+            if not set(changes).issubset(allowed):
+                raise ValueError("relation update includes unsupported fields")
+            existing = result_rows(self.client.query(
+                f"SELECT relation_type FROM graph_relation WHERE id = {self._literal(payload['id'])} LIMIT 1"
+            ))
+            if not existing:
+                raise ValueError("graph relation not found")
+            assignments = ", ".join(f"{key} = {self._literal(value)}" for key, value in changes.items())
+            self.client.command(f"ALTER TABLE graph_relation UPDATE {assignments} WHERE id = {self._literal(payload['id'])}")
+            if existing[0]["relation_type"] == "statement":
+                statement_changes = {
+                    "subject_entity_id": changes.get("source_node_id"),
+                    "object_entity_id": changes.get("target_node_id"),
+                    "predicate": changes.get("label"),
+                    "description": changes.get("description"),
+                    "status": changes.get("status"),
+                    "confidence": changes.get("confidence"),
+                    "metadata": changes.get("metadata"),
+                }
+                statement_assignments = ", ".join(
+                    f"{key} = {self._literal(value)}" for key, value in statement_changes.items() if value is not None
+                )
+                if statement_assignments:
+                    self.client.command(f"ALTER TABLE statement UPDATE {statement_assignments} WHERE id = {self._literal(payload['id'])}")
+            return
+        if operation_type == OperationType.DELETE_RELATION:
+            relation_id = self._literal(payload["id"])
+            relation = result_rows(self.client.query(f"SELECT relation_type FROM graph_relation WHERE id = {relation_id} LIMIT 1"))
+            if not relation:
+                raise ValueError("graph relation not found")
+            self.client.command(f"ALTER TABLE graph_relation UPDATE status = 'deleted' WHERE id = {relation_id}")
+            if relation[0]["relation_type"] == "statement":
+                self.client.command(f"ALTER TABLE statement UPDATE status = 'invalidated' WHERE id = {relation_id}")
+                self.client.command(f"ALTER TABLE knowledge_element UPDATE status = 'invalidated' WHERE id = {relation_id}")
             return
         if operation_type == OperationType.INVALIDATE_STATEMENT:
             self.client.command("ALTER TABLE knowledge_element UPDATE status = 'invalidated' " f"WHERE id = {self._literal(payload['id'])}")

@@ -28,6 +28,8 @@ class OperationType(str, Enum):
     UPDATE_ENTITY = "update_entity"
     UPDATE_EVENT = "update_event"
     UPDATE_NODE = "update_node"
+    UPDATE_RELATION = "update_relation"
+    DELETE_RELATION = "delete_relation"
     INVALIDATE_STATEMENT = "invalidate_statement"
     DELETE_NODE = "delete_node"
     MERGE_ENTITY = "merge_entity"
@@ -56,6 +58,10 @@ class ChapterCreate(BaseModel):
 class ChapterUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=500)
     sequence: int | None = Field(default=None, ge=1)
+
+
+class ChapterOrderUpdate(BaseModel):
+    chapter_ids: list[UUID] = Field(min_length=1)
 
 
 class ChapterDocumentUpdate(BaseModel):
@@ -93,6 +99,41 @@ class TextProposal(BaseModel):
 
 class ProposalDecision(BaseModel):
     accepted_ids: list[UUID] = Field(default_factory=list, max_length=500)
+
+
+class AgentRunCreate(BaseModel):
+    """A contextual writer-tool invocation.
+
+    ``agent_group`` deliberately maps several collaborating ADK agents to one
+    writer-facing task; the individual stages are returned in ``result``.
+    """
+    agent_group: Literal["analysis", "draft", "review", "research", "visuals", "voice", "produce"]
+    chapter_id: UUID | None = None
+    scope: Literal["chapter", "story"] = "chapter"
+    instruction: str = Field(default="", max_length=10_000)
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentRunResponse(BaseModel):
+    id: UUID
+    graph_id: UUID
+    chapter_id: UUID | None = None
+    agent_group: str
+    scope: str
+    status: str
+    progress: int
+    message: str
+    error: str | None = None
+    result: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentRunReview(BaseModel):
+    accepted_text_ids: list[str] = Field(default_factory=list, max_length=100)
+    accepted_proposal_ids: list[UUID] = Field(default_factory=list, max_length=500)
+
+
+class StoryboardDecision(BaseModel):
+    selected_scene_ids: list[str] = Field(default_factory=list, max_length=12)
 
 
 class NarrativeOperation(BaseModel):

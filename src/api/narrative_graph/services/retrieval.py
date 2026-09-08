@@ -24,16 +24,16 @@ class SubgraphService:
             parameters["event_ids"] = request.event_ids
             event_filter = " AND id IN {event_ids:Array(UUID)}"
         entities = result_rows(self.client.query(
-            "SELECT id, name, type, status, description, confidence, aliases, metadata FROM entity "
+            "SELECT id, name, type, status, description, content, confidence, aliases, metadata FROM entity "
             f"WHERE graph_id = {{graph_id:UUID}} AND status != 'deleted'{entity_filter} LIMIT {{limit:UInt32}}", parameters=parameters))
         events = result_rows(self.client.query(
-            "SELECT id, time_id, name, type, status, description, confidence, metadata FROM event "
+            "SELECT id, time_id, name, type, status, description, content, confidence, metadata FROM event "
             f"WHERE graph_id = {{graph_id:UUID}} AND status != 'deleted'{event_filter} LIMIT {{limit:UInt32}}", parameters=parameters))
         contexts = result_rows(self.client.query(
-            "SELECT id, type, description, holder_entity_id, confidence, metadata FROM context "
+            "SELECT id, name, type, description, content, holder_entity_id, confidence, metadata FROM context "
             "WHERE graph_id = {graph_id:UUID} LIMIT {limit:UInt32}", parameters=parameters))
         elements = result_rows(self.client.query(
-            "SELECT id, time_id, context_id, element_type, description, origin, status, confidence, metadata FROM knowledge_element "
+            "SELECT id, time_id, context_id, element_type, name, description, content, origin, status, confidence, metadata FROM knowledge_element "
             "WHERE graph_id = {graph_id:UUID} AND status != 'invalidated' LIMIT {limit:UInt32}", parameters=parameters))
         statements = result_rows(self.client.query(
             "SELECT s.id, s.subject_entity_id, s.predicate, s.object_entity_id, s.description, s.status, s.confidence, s.metadata FROM statement AS s "

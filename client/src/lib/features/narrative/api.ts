@@ -6,6 +6,8 @@ import type {
 	StoryChapter,
 	Subgraph,
 	TextProposal,
+	AgentGroup,
+	AgentRun,
 	TipTapDocument
 } from './types';
 
@@ -31,6 +33,7 @@ export const narrativeApi = {
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ name })
 		}),
+	deleteGraph: (graphId: string) => request<void>(`/api/graphs/${graphId}`, { method: 'DELETE' }),
 	createEntity: (graphId: string, entity: { name: string; type: string; status: string }) =>
 		request<OperationBatch>(`/api/graphs/${graphId}/operations`, {
 			method: 'POST',
@@ -82,6 +85,7 @@ export const narrativeApi = {
 						type: String(values.type),
 						status: String(values.status ?? 'active'),
 						description: String(values.description ?? ''),
+						content: String(values.content ?? ''),
 						confidence: Number(values.confidence ?? 1),
 						aliases: values.aliases ?? [],
 						metadata
@@ -93,22 +97,27 @@ export const narrativeApi = {
 							type: String(values.type),
 							status: String(values.status ?? 'active'),
 							description: String(values.description ?? ''),
+							content: String(values.content ?? ''),
 							confidence: Number(values.confidence ?? 1),
 							metadata
 						}
 					: kind === 'context'
 						? {
 								id,
+								name: String(values.name),
 								type: String(values.type),
 								description: String(values.description ?? ''),
+								content: String(values.content ?? ''),
 								holder_entity_id: values.holder_entity_id || null,
 								confidence: Number(values.confidence ?? 1),
 								metadata
 							}
 						: {
-								id,
-								element_type: String(values.element_type),
-								description: String(values.description ?? ''),
+							id,
+							element_type: String(values.element_type),
+							name: String(values.name),
+							description: String(values.description ?? ''),
+							content: String(values.content ?? ''),
 								origin: String(values.origin ?? 'writer'),
 								status: String(values.status ?? 'active'),
 								confidence: Number(values.confidence ?? 1),
@@ -277,6 +286,34 @@ export const narrativeApi = {
 			})
 		});
 	},
+	updateRelation: (graphId: string, relationId: string, changes: Record<string, unknown>) =>
+		request<OperationBatch>(`/api/graphs/${graphId}/operations`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+			body: JSON.stringify({
+				operations: [{
+					id: crypto.randomUUID(),
+					operation_type: 'update_relation',
+					origin: 'writer',
+					payload: { id: relationId, changes },
+					provenance: { source: 'writer-ui' }
+				}]
+			})
+		}),
+	deleteRelation: (graphId: string, relationId: string) =>
+		request<OperationBatch>(`/api/graphs/${graphId}/operations`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+			body: JSON.stringify({
+				operations: [{
+					id: crypto.randomUUID(),
+					operation_type: 'delete_relation',
+					origin: 'writer',
+					payload: { id: relationId },
+					provenance: { source: 'writer-ui' }
+				}]
+			})
+		}),
 	updateNode: (
 		graphId: string,
 		id: string,
@@ -304,6 +341,38 @@ export const narrativeApi = {
 
 const workspacePath = (graphId: string, path = '') => `/api/workspace/${graphId}${path}`;
 export const workspaceApi = {
+	startAgentRun: (
+		graphId: string,
+		runRequest: {
+			agent_group: AgentGroup;
+			chapter_id?: string;
+			scope?: 'chapter' | 'story';
+			instruction?: string;
+		}
+	) =>
+		request<AgentRun>(workspacePath(graphId, '/agent-runs'), {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(runRequest)
+		}),
+	getAgentRun: (graphId: string, runId: string) =>
+		request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}`)),
+	listAgentRuns: (graphId: string, chapterId?: string) =>
+		request<AgentRun[]>(
+			workspacePath(graphId, `/agent-runs${chapterId ? `?chapter_id=${chapterId}` : ''}`)
+		),
+	reviewAgentRun: (graphId: string, runId: string, accepted_text_ids: string[]) =>
+		request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}/review`), {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ accepted_text_ids })
+		}),
+	saveStoryboards: (graphId: string, runId: string, selected_scene_ids: string[]) =>
+		request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}/storyboards`), {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ selected_scene_ids })
+		}),
 	listChapters: (graphId: string) => request<StoryChapter[]>(workspacePath(graphId, '/chapters')),
 	getChapter: (graphId: string, chapterId: string) =>
 		request<StoryChapter>(workspacePath(graphId, `/chapters/${chapterId}`)),
@@ -324,6 +393,12 @@ export const workspaceApi = {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(update)
+		}),
+	reorderChapters: (graphId: string, chapterIds: string[]) =>
+		request<StoryChapter[]>(workspacePath(graphId, '/chapters/order'), {
+			method: 'PUT',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ chapter_ids: chapterIds })
 		}),
 	saveDocument: (
 		graphId: string,

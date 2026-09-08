@@ -48,6 +48,11 @@ class OperationBatchService:
             if operation.operation_type == OperationType.UPDATE_NODE:
                 if not payload.get("id") or not payload.get("changes") or payload.get("node_type") not in {"entity", "event", "context", "knowledge_element"}:
                     raise HTTPException(status_code=422, detail="update_node requires an id, changes, and supported node_type")
+            if operation.operation_type == OperationType.UPDATE_RELATION:
+                if not payload.get("id") or not payload.get("changes"):
+                    raise HTTPException(status_code=422, detail="update_relation requires an id and changes")
+            if operation.operation_type == OperationType.DELETE_RELATION and not payload.get("id"):
+                raise HTTPException(status_code=422, detail="delete_relation requires an id")
             if operation.operation_type == OperationType.INVALIDATE_STATEMENT and not payload.get("id"):
                 raise HTTPException(status_code=422, detail="invalidate_statement requires the statement id")
             if operation.operation_type == OperationType.DELETE_NODE:
@@ -96,7 +101,7 @@ class OperationBatchService:
     def get_batch(self, graph_id: UUID, batch_id: UUID) -> OperationBatchResponse:
         result = self.client.query(
             "SELECT id, status, operation_count, error FROM operation_batch "
-            "WHERE id = {id:UUID} AND graph_id = {graph_id:UUID} LIMIT 1",
+            "WHERE id = {id:UUID} AND graph_id = {graph_id:UUID} ORDER BY updated_at DESC LIMIT 1",
             parameters={"id": batch_id, "graph_id": graph_id},
         )
         rows = result_rows(result)

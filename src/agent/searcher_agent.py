@@ -74,7 +74,16 @@ class SearcherInvestigatorExecutor:
         logger.info("Executing Historical Investigator Agent with Parallel Search", task_id=task_id, query=request.query[:80])
 
         # 1. Execute Parallel Web Search for fact verification (requires PARALLEL_API_KEY)
-        web_search_res = await parallel_web_search(query=request.query)
+        try:
+            web_search_res = await parallel_web_search(query=request.query)
+        except Exception as error:
+            # Research remains useful without the optional Parallel account:
+            # return the agent's structured, clearly-labelled local audit.
+            logger.warning("Parallel research unavailable; continuing with local audit", error=str(error))
+            web_search_res = {
+                "results": [],
+                "summary": "Live web research is unavailable. This is a local narrative consistency audit, not an externally cited fact check.",
+            }
         sources = web_search_res.get("results", [])
         web_summary = web_search_res.get("summary", "")
 

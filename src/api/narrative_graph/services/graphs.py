@@ -43,3 +43,37 @@ class GraphService:
             parameters={"id": graph_id, "name": request.name},
         )
         return self.get_graph(graph_id)
+
+    def delete_graph(self, graph_id: UUID) -> None:
+        """Permanently remove a story and all data owned by its graph.
+
+        Tables that only reference nodes are deleted first while their parent
+        IDs are still available for the ClickHouse subqueries.
+        """
+        self.get_graph(graph_id)
+        parameters = {"graph_id": graph_id}
+        dependent_deletes = [
+            "ALTER TABLE statement DELETE WHERE subject_entity_id IN (SELECT id FROM entity WHERE graph_id = {graph_id:UUID}) OR object_entity_id IN (SELECT id FROM entity WHERE graph_id = {graph_id:UUID}) SETTINGS mutations_sync = 1",
+            "ALTER TABLE attribute DELETE WHERE owner_entity_id IN (SELECT id FROM entity WHERE graph_id = {graph_id:UUID}) SETTINGS mutations_sync = 1",
+            "ALTER TABLE event_participant DELETE WHERE event_id IN (SELECT id FROM event WHERE graph_id = {graph_id:UUID}) SETTINGS mutations_sync = 1",
+            "ALTER TABLE event_effect DELETE WHERE event_id IN (SELECT id FROM event WHERE graph_id = {graph_id:UUID}) OR knowledge_element_id IN (SELECT id FROM knowledge_element WHERE graph_id = {graph_id:UUID}) SETTINGS mutations_sync = 1",
+            "ALTER TABLE event_relation DELETE WHERE source_event_id IN (SELECT id FROM event WHERE graph_id = {graph_id:UUID}) OR target_event_id IN (SELECT id FROM event WHERE graph_id = {graph_id:UUID}) SETTINGS mutations_sync = 1",
+            "ALTER TABLE element_evidence DELETE WHERE evidence_id IN (SELECT id FROM evidence WHERE source_segment_id IN (SELECT id FROM source_segment WHERE graph_id = {graph_id:UUID})) SETTINGS mutations_sync = 1",
+            "ALTER TABLE evidence DELETE WHERE source_segment_id IN (SELECT id FROM source_segment WHERE graph_id = {graph_id:UUID}) SETTINGS mutations_sync = 1",
+        ]
+        for statement in dependent_deletes:
+            self.client.command(statement, parameters=parameters)
+        graph_tables = [
+            "agent_artifact", "agent_run", "chapter_analysis_proposal", "chapter_analysis_run", "chapter_node",
+            "story_chapter", "graph_operation", "operation_batch", "source_segment", "graph_relation",
+            "knowledge_element", "event", "context", "time", "entity",
+        ]
+        for table in graph_tables:
+            self.client.command(
+                f"ALTER TABLE {table} DELETE WHERE graph_id = {{graph_id:UUID}} SETTINGS mutations_sync = 1",
+                parameters=parameters,
+            )
+        self.client.command(
+            "ALTER TABLE narrative_graph DELETE WHERE id = {graph_id:UUID} SETTINGS mutations_sync = 1",
+            parameters=parameters,
+        )

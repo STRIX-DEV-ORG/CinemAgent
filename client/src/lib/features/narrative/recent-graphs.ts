@@ -15,3 +15,9 @@ export function rememberGraph(graph: NarrativeGraph): NarrativeGraph[] {
 	if (browser) localStorage.setItem(storageKey, JSON.stringify(graphs));
 	return graphs;
 }
+export function forgetGraph(graphId: string): NarrativeGraph[] {
+	const normalizedId = String(graphId).toLowerCase();
+	const graphs = loadRecentGraphs().filter((item) => String(item.id).toLowerCase() !== normalizedId);
+	if (browser) localStorage.setItem(storageKey, JSON.stringify(graphs));
+	return graphs;
+}

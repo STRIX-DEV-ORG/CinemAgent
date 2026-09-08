@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS entity
     type LowCardinality(String),
     status LowCardinality(String),
     description String DEFAULT '',
+    content String DEFAULT '',
 
     confidence Float32 DEFAULT 1.0,
 
@@ -71,7 +72,9 @@ CREATE TABLE IF NOT EXISTS context
     graph_id UUID,
 
     type LowCardinality(String),
+    name String DEFAULT '',
     description String DEFAULT '',
+    content String DEFAULT '',
 
     holder_entity_id Nullable(UUID),
 
@@ -99,6 +102,7 @@ CREATE TABLE IF NOT EXISTS event
     status LowCardinality(String),
 
     description String,
+    content String DEFAULT '',
 
     confidence Float32 DEFAULT 1.0,
 
@@ -139,8 +143,10 @@ CREATE TABLE IF NOT EXISTS knowledge_element
     context_id Nullable(UUID),
 
     element_type LowCardinality(String),
+    name String DEFAULT '',
 
     description String DEFAULT '',
+    content String DEFAULT '',
 
     origin LowCardinality(String),
     status LowCardinality(String),
@@ -204,7 +210,13 @@ ORDER BY (
 -- Add richer narrative fields for databases created before these columns existed.
 ALTER TABLE entity ADD COLUMN IF NOT EXISTS description String DEFAULT '';
 ALTER TABLE context ADD COLUMN IF NOT EXISTS description String DEFAULT '';
+ALTER TABLE context ADD COLUMN IF NOT EXISTS name String DEFAULT '';
+ALTER TABLE context ADD COLUMN IF NOT EXISTS content String DEFAULT '';
 ALTER TABLE knowledge_element ADD COLUMN IF NOT EXISTS description String DEFAULT '';
+ALTER TABLE knowledge_element ADD COLUMN IF NOT EXISTS name String DEFAULT '';
+ALTER TABLE knowledge_element ADD COLUMN IF NOT EXISTS content String DEFAULT '';
+ALTER TABLE entity ADD COLUMN IF NOT EXISTS content String DEFAULT '';
+ALTER TABLE event ADD COLUMN IF NOT EXISTS content String DEFAULT '';
 ALTER TABLE statement ADD COLUMN IF NOT EXISTS description String DEFAULT '';
 ALTER TABLE statement ADD COLUMN IF NOT EXISTS status LowCardinality(String) DEFAULT 'active';
 ALTER TABLE statement ADD COLUMN IF NOT EXISTS confidence Float32 DEFAULT 1.0;
@@ -462,3 +474,42 @@ CREATE TABLE IF NOT EXISTS chapter_analysis_proposal
 )
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY (run_id, id);
+
+
+-- Durable writer-facing AI work.  Results are JSON so every source agent can
+-- expose its own structured output without a schema migration per model.
+CREATE TABLE IF NOT EXISTS agent_run
+(
+    id UUID,
+    graph_id UUID,
+    chapter_id Nullable(UUID),
+    agent_group LowCardinality(String),
+    scope LowCardinality(String),
+    input JSON,
+    status LowCardinality(String),
+    progress UInt8,
+    message String,
+    error Nullable(String),
+    result JSON,
+    created_at DateTime64(3) DEFAULT now64(3),
+    updated_at DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (graph_id, id);
+
+
+CREATE TABLE IF NOT EXISTS agent_artifact
+(
+    id UUID,
+    run_id UUID,
+    graph_id UUID,
+    chapter_id Nullable(UUID),
+    kind LowCardinality(String),
+    title String,
+    storage_url String,
+    mime_type String,
+    metadata JSON,
+    created_at DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = MergeTree()
+ORDER BY (graph_id, run_id, id);

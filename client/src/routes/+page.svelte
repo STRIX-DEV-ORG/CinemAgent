@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import {
 		Card,
@@ -11,12 +12,21 @@
 	} from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
 	import { narrativeApi } from '$lib/features/narrative/api';
-	import { rememberGraph } from '$lib/features/narrative/recent-graphs';
-	import StoryMenu from '$lib/components/workspace/story-menu.svelte';
+	import { loadRecentGraphs, rememberGraph } from '$lib/features/narrative/recent-graphs';
 
 	let title = $state('');
 	let error = $state('');
 	let pending = $state(false);
+	let checkingForStory = $state(true);
+
+	onMount(async () => {
+		const mostRecentStory = loadRecentGraphs()[0];
+		if (mostRecentStory) {
+			await goto(resolve(`/stories/${mostRecentStory.id}`), { replaceState: true });
+			return;
+		}
+		checkingForStory = false;
+	});
 	async function createStory() {
 		if (!title.trim()) return;
 		pending = true;
@@ -32,11 +42,10 @@
 	}
 </script>
 
-<main class="grid min-h-screen grid-cols-[3.5rem_minmax(0,1fr)] bg-background">
-	<aside class="flex flex-col items-center gap-3 border-r py-4">
-		<StoryMenu compact />
-	</aside>
-	<div class="grid place-items-center p-6">
+<main class="grid min-h-screen place-items-center bg-background p-6">
+	{#if checkingForStory}
+		<p class="text-sm text-muted-foreground">Loading your workspace…</p>
+	{:else}<div class="w-full max-w-lg">
 		<Card class="w-full max-w-lg"
 			><CardHeader
 				><p class="text-sm font-semibold tracking-[0.18em] text-primary uppercase">CinemAgent</p>
@@ -59,5 +68,5 @@
 				</form></CardContent
 			></Card
 		>
-	</div>
+	</div>{/if}
 </main>

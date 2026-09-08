@@ -283,7 +283,7 @@ def get_media_asset(filename: str):
 
     for p in search_paths:
         if p.exists():
-            mime_type = "image/png" if filename.endswith(".png") else ("audio/wav" if filename.endswith(".wav") else "application/octet-stream")
+            mime_type = "image/png" if filename.endswith(".png") else ("audio/wav" if filename.endswith(".wav") else ("audio/mpeg" if filename.endswith(".mp3") else "application/octet-stream"))
             return FileResponse(path=str(p), media_type=mime_type)
 
     raise HTTPException(status_code=404, detail=f"Media file '{filename}' not found.")

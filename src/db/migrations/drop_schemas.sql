@@ -20,3 +20,5 @@ DROP TABLE IF EXISTS story_chapter;
 DROP TABLE IF EXISTS chapter_node;
 DROP TABLE IF EXISTS chapter_analysis_run;
 DROP TABLE IF EXISTS chapter_analysis_proposal;
+DROP TABLE IF EXISTS agent_artifact;
+DROP TABLE IF EXISTS agent_run;
