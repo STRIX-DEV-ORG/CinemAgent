@@ -4,7 +4,6 @@ from typing import Any, Dict, List
 from google.adk.agents import LlmAgent
 from google.adk.models import Gemini
 from google.genai import Client
-from google.adk.tools import agent_tool
 from google.adk import Context
 from google.adk import Workflow
 from google.adk.workflow import node

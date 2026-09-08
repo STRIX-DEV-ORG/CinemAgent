@@ -13,7 +13,7 @@ class GraphManager:
         try:
             self.client = get_clickhouse_client()
         except Exception as e:
-            logger.warn("GraphManager running in offline/disconnected mode", error=str(e))\
+            logger.warn("GraphManager running in offline/disconnected mode", error=str(e))
             self.client = None
 
     def add_node(self, node: KGNode) -> None:
