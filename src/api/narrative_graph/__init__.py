@@ -21,6 +21,7 @@ from .routers.operations import router as operations_router
 from .routers.retrieval import router as retrieval_router
 from .routers.workspace import router as workspace_router
 from .routers.agents import router as agents_router
+from .routers.intelligence import router as intelligence_router
 from .service import NarrativeGraphService
 
 
@@ -30,6 +31,7 @@ router.include_router(operations_router)
 router.include_router(retrieval_router)
 router.include_router(workspace_router)
 router.include_router(agents_router)
+router.include_router(intelligence_router)
 
 __all__ = [
     "NarrativeGraphCreate",

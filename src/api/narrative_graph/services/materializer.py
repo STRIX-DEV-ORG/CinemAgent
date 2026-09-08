@@ -29,6 +29,7 @@ class OperationMaterializer:
 
     def __init__(self, client: Any) -> None:
         self.client = client
+        self.projections: Any | None = None
 
     @staticmethod
     def _literal(value: Any) -> str:
@@ -160,15 +161,26 @@ class OperationMaterializer:
 
     def materialize_batch(self, graph_id: UUID, batch_id: UUID) -> None:
         self.client.command(f"ALTER TABLE operation_batch UPDATE status = 'applying', updated_at = now64(3) WHERE id = '{batch_id}'")
+        # New batches materialize from the immutable event source. Keep the
+        # operation journal fallback only for batches created before cutover.
         result = self.client.query(
-            "SELECT id, graph_id, operation_type, payload FROM graph_operation "
-            "WHERE batch_id = {batch_id:UUID} ORDER BY sequence", parameters={"batch_id": batch_id},
+            "SELECT operation_id AS id, graph_id, event_type AS operation_type, payload FROM narrative_event "
+            "WHERE batch_id = {batch_id:UUID} AND operation_id IS NOT NULL ORDER BY version",
+            parameters={"batch_id": batch_id},
         )
+        operations = result_rows(result)
+        if not operations:
+            operations = result_rows(self.client.query(
+                "SELECT id, graph_id, operation_type, payload FROM graph_operation "
+                "WHERE batch_id = {batch_id:UUID} ORDER BY sequence", parameters={"batch_id": batch_id},
+            ))
         try:
-            for operation in result_rows(result):
+            for operation in operations:
                 self._apply_operation(operation)
                 self.client.command(f"ALTER TABLE graph_operation UPDATE status = 'applied', applied_at = now64(3) WHERE id = '{operation['id']}'")
             self.client.command(f"ALTER TABLE operation_batch UPDATE status = 'applied', updated_at = now64(3) WHERE id = '{batch_id}'")
+            if self.projections:
+                self.projections.project_graph(graph_id)
         except Exception as error:
             self.client.command(
                 "ALTER TABLE operation_batch UPDATE status = 'failed', error = "

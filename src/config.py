@@ -22,7 +22,9 @@ class Settings(BaseSettings):
 
     # Narrative Graph API settings
     NARRATIVE_API_KEY: str = os.getenv("NARRATIVE_API_KEY")
+    NARRATIVE_ADMIN_API_KEY: str = os.getenv("NARRATIVE_ADMIN_API_KEY", "")
     NARRATIVE_API_URL: str = os.getenv("NARRATIVE_API_URL", "")
+    NARRATIVE_READ_PROJECTIONS: bool = os.getenv("NARRATIVE_READ_PROJECTIONS", "false").lower() == "true"
 
     model_config = SettingsConfigDict(
         env_file=".env",

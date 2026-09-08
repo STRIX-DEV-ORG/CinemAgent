@@ -17,6 +17,8 @@ from .services.materializer import OperationMaterializer
 from .services.retrieval import SubgraphService
 from .services.workspace import WorkspaceService
 from .services.agents import AgentRunService
+from .services.intelligence import NarrativeIntelligenceService
+from .services.projections import NarrativeProjectionService
 
 
 class NarrativeGraphService:
@@ -30,6 +32,16 @@ class NarrativeGraphService:
         self.retrieval = SubgraphService(self.client, self.graphs)
         self.workspace = WorkspaceService(self.client, self.graphs)
         self.agents = AgentRunService(self.client, self.workspace, self.graphs)
+        self.intelligence = NarrativeIntelligenceService(self.client, self.graphs, self.workspace)
+        self.projections = NarrativeProjectionService(self.client)
+        self.batches.intelligence = self.intelligence
+        self.graphs.intelligence = self.intelligence
+        self.workspace.intelligence = self.intelligence
+        self.agents.intelligence = self.intelligence
+        self.projections.intelligence = self.intelligence
+        self.materializer.projections = self.projections
+        self.workspace.projections = self.projections
+        self.retrieval.projections = self.projections
 
     def create_graph(self, request: NarrativeGraphCreate) -> NarrativeGraphResponse:
         return self.graphs.create_graph(request)
@@ -42,6 +54,9 @@ class NarrativeGraphService:
 
     def delete_graph(self, graph_id: UUID) -> None:
         self.graphs.delete_graph(graph_id)
+
+    def restore_graph(self, graph_id: UUID) -> None:
+        self.graphs.restore_graph(graph_id)
 
     def submit_batch(self, graph_id: UUID, idempotency_key: str, batch: OperationBatchCreate) -> OperationBatchResponse:
         return self.batches.submit_batch(graph_id, idempotency_key, batch)

@@ -37,3 +37,8 @@ def delete_narrative_graph(
 	# finish its many table mutations after the UI has been released.
 	service.get_graph(graph_id)
 	background_tasks.add_task(service.delete_graph, graph_id)
+
+
+@router.post("/{graph_id}:restore", status_code=status.HTTP_204_NO_CONTENT)
+def restore_narrative_graph(graph_id: UUID, service: NarrativeGraphService = Depends(get_service)) -> None:
+    service.restore_graph(graph_id)
