@@ -63,3 +63,11 @@ body {
 		),
 		var(--background);
 }
+
+:where(button:not(:disabled), a[href], [role='button']:not([aria-disabled='true'])) {
+	cursor: pointer;
+}
+
+:where(button:disabled, [aria-disabled='true']) {
+	cursor: not-allowed;
+}

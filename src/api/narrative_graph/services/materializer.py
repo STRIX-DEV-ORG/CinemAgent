@@ -19,6 +19,7 @@ class OperationMaterializer:
         OperationType.CREATE_KNOWLEDGE_ELEMENT: "knowledge_element",
         OperationType.CREATE_ATTRIBUTE: "attribute",
         OperationType.CREATE_STATEMENT: "statement",
+        OperationType.CREATE_RELATION: "graph_relation",
         OperationType.CREATE_EVENT_EFFECT: "event_effect",
         OperationType.CREATE_EVENT_RELATION: "event_relation",
         OperationType.CREATE_SOURCE_SEGMENT: "source_segment",
@@ -37,7 +38,9 @@ class OperationMaterializer:
             return "1" if value else "0"
         if isinstance(value, (int, float)):
             return str(value)
-        if isinstance(value, (dict, list)):
+        if isinstance(value, list):
+            return "[" + ", ".join(OperationMaterializer._literal(item) for item in value) + "]"
+        if isinstance(value, dict):
             value = json.dumps(value)
         return "'" + str(value).replace("'", "\\'") + "'"
 
@@ -46,10 +49,17 @@ class OperationMaterializer:
         payload = json.loads(operation["payload"]) if isinstance(operation["payload"], str) else operation["payload"]
         if operation_type in self._CREATE_TABLES:
             table = self._CREATE_TABLES[operation_type]
-            if table in {"entity", "time", "context", "event", "knowledge_element", "source_segment"}:
+            if table in {"entity", "time", "context", "event", "knowledge_element", "source_segment", "graph_relation"}:
                 payload.setdefault("graph_id", str(operation["graph_id"]))
             columns = list(payload)
             self.client.insert(table, [[payload[column] for column in columns]], column_names=columns)
+            return
+        if operation_type == OperationType.LINK_NODE_TO_CHAPTER:
+            self.client.insert(
+                "chapter_node",
+                [[operation["graph_id"], payload["chapter_id"], payload["node_id"], payload["node_type"]]],
+                column_names=["graph_id", "chapter_id", "node_id", "node_type"],
+            )
             return
         if operation_type in {OperationType.UPDATE_ENTITY, OperationType.UPDATE_EVENT}:
             table = "entity" if operation_type == OperationType.UPDATE_ENTITY else "event"
@@ -60,8 +70,48 @@ class OperationMaterializer:
             assignments = ", ".join(f"{key} = {self._literal(value)}" for key, value in changes.items())
             self.client.command(f"ALTER TABLE {table} UPDATE {assignments} WHERE id = {self._literal(payload['id'])}")
             return
+        if operation_type == OperationType.UPDATE_NODE:
+            node_type = payload["node_type"]
+            table = node_type
+            allowed_by_type = {
+                "entity": {"name", "type", "status", "description", "confidence", "aliases", "metadata"},
+                "event": {"name", "type", "status", "description", "confidence", "metadata", "time_id"},
+                "context": {"type", "description", "holder_entity_id", "confidence", "metadata"},
+                "knowledge_element": {"time_id", "context_id", "element_type", "description", "origin", "status", "confidence", "metadata"},
+            }
+            changes = payload["changes"]
+            if not set(changes).issubset(allowed_by_type[node_type]):
+                raise ValueError("update includes unsupported fields")
+            key_column = "element_type" if node_type == "knowledge_element" else "type"
+            if key_column in changes:
+                existing = result_rows(self.client.query(
+                    f"SELECT * FROM {table} WHERE id = {self._literal(payload['id'])} LIMIT 1"
+                ))
+                if not existing:
+                    raise ValueError("graph element not found")
+                replacement = existing[0]
+                replacement.update(changes)
+                self.client.command(
+                    f"ALTER TABLE {table} DELETE WHERE id = {self._literal(payload['id'])} SETTINGS mutations_sync = 1"
+                )
+                columns = list(replacement)
+                self.client.insert(table, [[replacement[column] for column in columns]], column_names=columns)
+                return
+            assignments = ", ".join(f"{key} = {self._literal(value)}" for key, value in changes.items())
+            self.client.command(f"ALTER TABLE {table} UPDATE {assignments} WHERE id = {self._literal(payload['id'])}")
+            return
         if operation_type == OperationType.INVALIDATE_STATEMENT:
             self.client.command("ALTER TABLE knowledge_element UPDATE status = 'invalidated' " f"WHERE id = {self._literal(payload['id'])}")
+            return
+        if operation_type == OperationType.DELETE_NODE:
+            node_type = payload["node_type"]
+            node_id = self._literal(payload["id"])
+            if node_type == "context":
+                self.client.command(f"ALTER TABLE context DELETE WHERE id = {node_id}")
+            else:
+                table = "knowledge_element" if node_type == "knowledge_element" else node_type
+                status = "invalidated" if node_type == "knowledge_element" else "deleted"
+                self.client.command(f"ALTER TABLE {table} UPDATE status = '{status}' WHERE id = {node_id}")
             return
         if operation_type == OperationType.MERGE_ENTITY:
             self.client.command(

@@ -22,6 +22,7 @@ class OperationBatchService:
         OperationType.CREATE_KNOWLEDGE_ELEMENT,
         OperationType.CREATE_ATTRIBUTE,
         OperationType.CREATE_STATEMENT,
+        OperationType.CREATE_RELATION,
         OperationType.CREATE_EVENT_EFFECT,
         OperationType.CREATE_EVENT_RELATION,
         OperationType.CREATE_SOURCE_SEGMENT,
@@ -44,8 +45,17 @@ class OperationBatchService:
             if operation.operation_type in {OperationType.UPDATE_ENTITY, OperationType.UPDATE_EVENT}:
                 if not payload.get("id") or not payload.get("changes"):
                     raise HTTPException(status_code=422, detail=f"{operation.operation_type.value} requires id and changes")
+            if operation.operation_type == OperationType.UPDATE_NODE:
+                if not payload.get("id") or not payload.get("changes") or payload.get("node_type") not in {"entity", "event", "context", "knowledge_element"}:
+                    raise HTTPException(status_code=422, detail="update_node requires an id, changes, and supported node_type")
             if operation.operation_type == OperationType.INVALIDATE_STATEMENT and not payload.get("id"):
                 raise HTTPException(status_code=422, detail="invalidate_statement requires the statement id")
+            if operation.operation_type == OperationType.DELETE_NODE:
+                if not payload.get("id") or payload.get("node_type") not in {"entity", "event", "context", "knowledge_element"}:
+                    raise HTTPException(status_code=422, detail="delete_node requires an id and supported node_type")
+            if operation.operation_type == OperationType.LINK_NODE_TO_CHAPTER:
+                if not payload.get("chapter_id") or not payload.get("node_id") or payload.get("node_type") not in {"entity", "event", "context", "knowledge_element", "relation"}:
+                    raise HTTPException(status_code=422, detail="link_node_to_chapter requires chapter_id, node_id, and supported node_type")
             if operation.operation_type == OperationType.MERGE_ENTITY and not (payload.get("source_id") and payload.get("target_id")):
                 raise HTTPException(status_code=422, detail="merge_entity requires source_id and target_id")
             if payload.get("graph_id") and str(payload["graph_id"]) != str(graph_id):
