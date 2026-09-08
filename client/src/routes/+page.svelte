@@ -49,19 +49,24 @@
 		<Card class="w-full max-w-lg"
 			><CardHeader
 				><p class="text-sm font-semibold tracking-[0.18em] text-primary uppercase">CinemAgent</p>
-				<CardTitle class="text-3xl">Begin a story</CardTitle><CardDescription
-					>Create the story and its first chapter. Your prose and narrative graph will grow
-					together.</CardDescription
-				></CardHeader
-			><CardContent
-				><form
+				<CardTitle class="text-3xl">Begin a story</CardTitle>
+				<CardDescription>
+					Create the story and its first chapter. Your prose and narrative graph will grow together.
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<div class="mb-4 rounded-md text-sm text-blue-800 ">
+					<strong>Note:</strong> Insert Title Only for your new story.
+				</div>
+				<form
 					class="grid gap-4"
 					onsubmit={(event) => {
 						event.preventDefault();
 						void createStory();
 					}}
 				>
-					<Input bind:value={title} placeholder="The Silent Throne" autofocus /><Button
+					<Input bind:value={title} placeholder="Insert Title Only..." autofocus />
+					<Button
 						type="submit"
 						disabled={pending || !title.trim()}>Create story</Button
 					>{#if error}<p class="text-sm text-destructive">{error}</p>{/if}

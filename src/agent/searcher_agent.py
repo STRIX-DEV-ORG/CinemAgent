@@ -17,7 +17,7 @@ logger = structlog.get_logger(__name__)
 
 searcher_investigator_agent = LlmAgent(
     name='searcher_investigator_agent',
-    model='gemini-2.5-flash',
+    model=settings.GEMINI_MODEL_VERSION,
     description=(
         'Fact-checks scene descriptions and queries, detects historical anachronisms, '
         'and audits narrative consistency against period lore using Parallel Web Search API.'
@@ -56,7 +56,7 @@ class SearcherInvestigatorExecutor:
                 from google import genai
                 client = genai.Client(api_key=settings.GEMINI_API_KEY)
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model=settings.GEMINI_MODEL_VERSION,
                     contents=prompt,
                     config={'system_instruction': HISTORICAL_INVESTIGATOR_INSTRUCTION, 'temperature': 0.7}
                 )
@@ -64,6 +64,30 @@ class SearcherInvestigatorExecutor:
             except Exception as e:
                 logger.warn("Historical Investigator Gemini call failed", error=str(e))
         return None
+
+    async def _get_optimized_search_query(self, request: InvestigatorRequest) -> str:
+        if settings.GEMINI_API_KEY:
+            try:
+                from google import genai
+                client = genai.Client(api_key=settings.GEMINI_API_KEY)
+                prompt = (
+                    f"Given the following query/claim from a story: '{request.query}'\n"
+                    f"Era Context: {request.era_context or 'Auto-detect'}\n"
+                    f"Genre: {request.genre}\n"
+                    f"Formulate a highly specific search engine query to investigate its historical accuracy. "
+                    f"Use specific words or historical context if discovered in the text. "
+                    f"For example, an ancient history about Texcoco should not use 'Mexico' because it didn't exist, "
+                    f"so use something like 'Texcoco valley before Mexico independence'.\n"
+                    f"Return ONLY the search query string and nothing else."
+                )
+                response = client.models.generate_content(
+                    model=settings.GEMINI_MODEL_VERSION,
+                    contents=prompt
+                )
+                return response.text.strip()
+            except Exception as e:
+                logger.warn("Historical Investigator Search Query call failed", error=str(e))
+        return request.query
 
     async def execute(self, request: InvestigatorRequest) -> InvestigatorResponse:
         """
@@ -73,9 +97,11 @@ class SearcherInvestigatorExecutor:
         task_id = f"inv_{uuid.uuid4().hex[:8]}"
         logger.info("Executing Historical Investigator Agent with Parallel Search", task_id=task_id, query=request.query[:80])
 
+        search_query = await self._get_optimized_search_query(request)
+
         # 1. Execute Parallel Web Search for fact verification (requires PARALLEL_API_KEY)
         try:
-            web_search_res = await parallel_web_search(query=request.query)
+            web_search_res = await parallel_web_search(query=search_query)
         except Exception as error:
             # Research remains useful without the optional Parallel account:
             # return the agent's structured, clearly-labelled local audit.
@@ -124,9 +150,8 @@ class SearcherInvestigatorExecutor:
                 era = "14th Century (1300-1399 CE)"
                 summary = "Flintlock firing mechanisms did not emerge until the early 17th century (circa 1610s in France)."
                 anachronisms = [{
-                    "element": "Flintlock firearm",
-                    "issue": "Flintlock technology was invented centuries after the 14th century.",
-                    "periodAccurateAlternative": "Early hand cannon (handgonne), fire lance, or heavy arbalest / crossbow."
+                    "whyIsNotAccurate": "Flintlock technology was invented centuries after the 14th century.",
+                    "whatToChange": "Replace flintlock with an early Italian handgonne or crossbow to maintain strict 14th century accuracy."
                 }]
                 recommendations = "Replace flintlock with an early Italian handgonne or crossbow to maintain strict 14th century accuracy."
 

@@ -3,8 +3,6 @@ import re
 import uuid
 import structlog
 from typing import Any, Dict, List, Optional
-from google.adk.agents import LlmAgent
-from google.adk import Context, Workflow
 from google.adk.workflow import node
 
 from src.config import settings
@@ -22,18 +20,6 @@ logger = structlog.get_logger(__name__)
 # -----------------------------------------------------------------------------
 # Dialogue TTS Agent Definition
 # -----------------------------------------------------------------------------
-
-dialogue_tts_agent = LlmAgent(
-    name='dialogue_tts_agent',
-    model='gemini-2.5-flash',
-    description=(
-        'Extracts character dialogue from chapter text or script prose and assigns character voice personas for Gemini Flash TTS audio synthesis.'
-    ),
-    sub_agents=[],
-    instruction=DIALOGUE_TTS_AGENT_INSTRUCTION,
-    tools=[],
-)
-
 
 def _parse_agent_json(result: Any) -> Any:
     if isinstance(result, str):
@@ -99,68 +85,21 @@ def _speaker_from_quote_context(before: str, after: str, known_names: List[str],
 
 
 def _extract_attributed_dialogues(chapter_text: str, character_hints: Dict[str, str], emotion_hint: str | None) -> List[Dict[str, Any]]:
-    """Extract screenplay and quoted dialogue into one audio segment per line."""
+    """Extract screenplay and quoted dialogue strictly from the [character] (emotion) : "dialogue" format."""
     dialogues: List[Dict[str, Any]] = []
     assigned_voices: Dict[str, str] = {}
-    known_names = list(character_hints)
-
-    # Screenplay-style lines are already explicitly attributed: ELENA: Stop.
-    for index, match in enumerate(re.finditer(r"(?m)^\s*(?:\[\s*)?([A-Z][A-Za-z'’\-]*(?:\s+[A-Z][A-Za-z'’\-]*){0,2})(?:\s*\])?\s*(?:\([^\n)]*\))?\s*:\s*[\"“]?(.+?)[\"”]?\s*$", chapter_text), start=1):
-        speaker, line = match.group(1).strip(), match.group(2).strip()
+    
+    # regex for `[character] (emotion) : "dialogue"`
+    pattern = r'(?m)^\s*\[\s*(.+?)\s*\]\s*\(\s*(.+?)\s*\)\s*:\s*["“](.+?)["”]\s*$'
+    
+    for index, match in enumerate(re.finditer(pattern, chapter_text), start=1):
+        speaker, emotion, line = match.group(1).strip(), match.group(2).strip(), match.group(3).strip()
         if line:
             dialogues.append({
                 "dialogueId": f"script_{index}", "speaker": speaker, "line": line,
-                "parenthetical": "script dialogue", "emotion": emotion_hint or "expressive",
+                "parenthetical": emotion, "emotion": emotion,
                 "voiceProfile": {"voiceName": _voice_for_speaker(speaker, character_hints, assigned_voices)},
             })
-    if dialogues:
-        return dialogues
-
-    def add_narration(fragment: str, index: int) -> None:
-        # Do not make the narrator read a bare attribution such as
-        # "Elena said,"; the following character track already conveys it.
-        fragment = re.sub(
-            rf"(?is)(?:^|(?<=[.!?]))\s*[A-Z][A-Za-z'’\-]*(?:\s+[A-Z][A-Za-z'’\-]*){{0,2}}\s+(?:{_SPEECH_VERBS})\s*[,;:—-]?\s*$",
-            "",
-            fragment,
-        )
-        fragment = re.sub(
-            rf"(?is)^\s*[,;:—-]?\s*[A-Z][A-Za-z'’\-]*(?:\s+[A-Z][A-Za-z'’\-]*){{0,2}}\s+(?:{_SPEECH_VERBS})\s*[.!?]?\s*$",
-            "",
-            fragment,
-        )
-        fragment = re.sub(r"\s+", " ", fragment).strip()
-        if fragment:
-            dialogues.append({
-                "dialogueId": f"narration_{index}", "speaker": "Narrator", "line": fragment,
-                "parenthetical": "chapter narration", "emotion": emotion_hint or "measured and cinematic",
-                "voiceProfile": {"voiceName": _voice_for_speaker("Narrator", character_hints, assigned_voices)},
-            })
-
-    previous_speaker: str | None = None
-    quote_pattern = re.compile(r"[\"“]([^\"”]+)[\"”]")
-    cursor = 0
-    for index, match in enumerate(quote_pattern.finditer(chapter_text), start=1):
-        add_narration(chapter_text[cursor:match.start()], index)
-        line = re.sub(r"\s+", " ", match.group(1)).strip()
-        if not line:
-            cursor = match.end()
-            continue
-        speaker = _speaker_from_quote_context(
-            chapter_text[max(0, match.start() - 160):match.start()],
-            chapter_text[match.end():match.end() + 160],
-            known_names,
-            previous_speaker,
-        )
-        previous_speaker = speaker if speaker != "Unattributed speaker" else previous_speaker
-        dialogues.append({
-            "dialogueId": f"quote_{index}", "speaker": speaker, "line": line,
-            "parenthetical": "dialogue extracted from chapter prose", "emotion": emotion_hint or "expressive",
-            "voiceProfile": {"voiceName": _voice_for_speaker(speaker, character_hints, assigned_voices)},
-        })
-        cursor = match.end()
-    if dialogues:
-        add_narration(chapter_text[cursor:], len(dialogues) + 1)
     return dialogues
 
 
@@ -210,7 +149,7 @@ class DialogueTTSExecutor:
                 from google import genai
                 client = genai.Client(api_key=settings.GEMINI_API_KEY)
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model=settings.GEMINI_MODEL_VERSION,
                     contents=prompt,
                     config={'system_instruction': DIALOGUE_TTS_AGENT_INSTRUCTION, 'temperature': 0.7}
                 )
@@ -233,6 +172,7 @@ class DialogueTTSExecutor:
             f"Emotion Directive: {request.emotion_hint or 'natural authentic'}\n"
             f"Character Voice Hints: {json.dumps(request.character_hints or {})}\n"
             f"Segments: {json.dumps(request.segment_ids)}\n\n"
+            f"IMPORTANT: You must deduce the appropriate voice preset and emotion for each character based on the context (personality, tone, age, etc). Available presets: Aoede, Fenrir, Puck, Charon, Kore.\n\n"
             f"Chapter Text:\n{request.chapter_text}"
         )
 
@@ -251,38 +191,28 @@ class DialogueTTSExecutor:
         # guarantees one audio artifact per quoted/script line, preserving the
         # speaking character for the writer-facing player list.
         if attributed_dialogues:
+            # Merge the LLM's deduced voice profiles and emotions with the exact attributions
+            llm_voices = {}
+            llm_emotions = {}
+            if isinstance(raw_dialogues, list):
+                for d in raw_dialogues:
+                    if isinstance(d, dict) and d.get("speaker"):
+                        spk = d["speaker"]
+                        if "voiceProfile" in d:
+                            llm_voices[spk] = d["voiceProfile"]
+                        if "emotion" in d:
+                            llm_emotions[spk] = d["emotion"]
+                            
+            for ad in attributed_dialogues:
+                spk = ad.get("speaker")
+                if spk in llm_voices:
+                    ad["voiceProfile"] = llm_voices[spk]
+                if spk in llm_emotions:
+                    ad["emotion"] = llm_emotions[spk]
             raw_dialogues = attributed_dialogues
 
-        # Script labels and LLM dialogue extraction can otherwise omit the
-        # passive prose entirely. Add narrator clips whenever descriptive
-        # chapter text remains and no narrator segment was already extracted.
-        has_narrator = any(
-            str(dialogue.get("speaker") or "").casefold() == "narrator"
-            for dialogue in raw_dialogues
-            if isinstance(dialogue, dict)
-        )
-        if not has_narrator:
-            narration_segments = _extract_passive_narration(request.chapter_text, request.emotion_hint)
-            if narration_segments:
-                raw_dialogues = [*narration_segments, *raw_dialogues]
-
-        # A prose chapter often contains no quoted dialogue.  The voice tool
-        # should still be useful in that case, so render an explicit narration
-        # track rather than returning an empty artifact list.
-        if not raw_dialogues and request.chapter_text.strip():
-            raw_dialogues.append({
-                "dialogueId": "narration_1",
-                "speaker": "Narrator",
-                "parenthetical": "narrating the chapter",
-                "line": request.chapter_text.strip(),
-                "emotion": request.emotion_hint or "measured and cinematic",
-                "voiceProfile": {
-                    "voiceName": "Aoede",
-                    "gender": "NEUTRAL",
-                    "speakingRate": 1.0,
-                    "pitch": "+0st"
-                }
-            })
+        # Removed passive narration fallback logic to ensure only text with
+        # the [character] (emotion) : "dialogue" structure produces audio.
 
         # Synthesize audio for each dialogue line
         dialogue_models: List[DialogueLine] = []
