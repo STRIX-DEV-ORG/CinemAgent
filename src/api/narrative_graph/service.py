@@ -6,6 +6,7 @@ from src.db.clickhouse_client import get_clickhouse_client
 from .models import (
     NarrativeGraphCreate,
     NarrativeGraphResponse,
+    NarrativeGraphUpdate,
     OperationBatchCreate,
     OperationBatchResponse,
     SubgraphQuery,
@@ -14,6 +15,7 @@ from .services.batches import OperationBatchService
 from .services.graphs import GraphService
 from .services.materializer import OperationMaterializer
 from .services.retrieval import SubgraphService
+from .services.workspace import WorkspaceService
 
 
 class NarrativeGraphService:
@@ -25,12 +27,16 @@ class NarrativeGraphService:
         self.batches = OperationBatchService(self.client, self.graphs)
         self.materializer = OperationMaterializer(self.client)
         self.retrieval = SubgraphService(self.client, self.graphs)
+        self.workspace = WorkspaceService(self.client, self.graphs)
 
     def create_graph(self, request: NarrativeGraphCreate) -> NarrativeGraphResponse:
         return self.graphs.create_graph(request)
 
     def get_graph(self, graph_id: UUID) -> NarrativeGraphResponse:
         return self.graphs.get_graph(graph_id)
+
+    def update_graph(self, graph_id: UUID, request: NarrativeGraphUpdate) -> NarrativeGraphResponse:
+        return self.graphs.update_graph(graph_id, request)
 
     def submit_batch(self, graph_id: UUID, idempotency_key: str, batch: OperationBatchCreate) -> OperationBatchResponse:
         return self.batches.submit_batch(graph_id, idempotency_key, batch)

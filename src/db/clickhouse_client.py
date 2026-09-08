@@ -2,7 +2,7 @@ from opentelemetry.metrics import obj
 import clickhouse_connect
 from clickhouse_connect.driver.client import Client
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 import structlog
 from src.config import settings
 
@@ -34,6 +34,7 @@ def get_clickhouse_client() -> Client:
                 password=settings.CLICKHOUSE_PASSWORD,
                 database=settings.CLICKHOUSE_DATABASE,
                 secure=settings.CLICKHOUSE_SECURE,
+                autogenerate_session_id=False,
                 connect_timeout=2,
                 send_receive_timeout=5
             )

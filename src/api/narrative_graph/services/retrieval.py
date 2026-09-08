@@ -24,18 +24,43 @@ class SubgraphService:
             parameters["event_ids"] = request.event_ids
             event_filter = " AND id IN {event_ids:Array(UUID)}"
         entities = result_rows(self.client.query(
-            "SELECT id, name, type, status, confidence, aliases, metadata FROM entity "
-            f"WHERE graph_id = {{graph_id:UUID}}{entity_filter} LIMIT {{limit:UInt32}}", parameters=parameters))
+            "SELECT id, name, type, status, description, confidence, aliases, metadata FROM entity "
+            f"WHERE graph_id = {{graph_id:UUID}} AND status != 'deleted'{entity_filter} LIMIT {{limit:UInt32}}", parameters=parameters))
         events = result_rows(self.client.query(
             "SELECT id, time_id, name, type, status, description, confidence, metadata FROM event "
-            f"WHERE graph_id = {{graph_id:UUID}}{event_filter} LIMIT {{limit:UInt32}}", parameters=parameters))
+            f"WHERE graph_id = {{graph_id:UUID}} AND status != 'deleted'{event_filter} LIMIT {{limit:UInt32}}", parameters=parameters))
+        contexts = result_rows(self.client.query(
+            "SELECT id, type, description, holder_entity_id, confidence, metadata FROM context "
+            "WHERE graph_id = {graph_id:UUID} LIMIT {limit:UInt32}", parameters=parameters))
         elements = result_rows(self.client.query(
-            "SELECT id, time_id, context_id, element_type, origin, status, confidence, metadata FROM knowledge_element "
+            "SELECT id, time_id, context_id, element_type, description, origin, status, confidence, metadata FROM knowledge_element "
             "WHERE graph_id = {graph_id:UUID} AND status != 'invalidated' LIMIT {limit:UInt32}", parameters=parameters))
         statements = result_rows(self.client.query(
-            "SELECT s.id, s.subject_entity_id, s.predicate, s.object_entity_id FROM statement AS s "
+            "SELECT s.id, s.subject_entity_id, s.predicate, s.object_entity_id, s.description, s.status, s.confidence, s.metadata FROM statement AS s "
             "INNER JOIN knowledge_element AS k ON s.id = k.id "
             "WHERE k.graph_id = {graph_id:UUID} AND k.status != 'invalidated' LIMIT {limit:UInt32}", parameters=parameters))
+        relations = result_rows(self.client.query(
+            "SELECT id, source_node_id, target_node_id, relation_type, label, description, status, confidence, metadata "
+            "FROM graph_relation WHERE graph_id = {graph_id:UUID} AND status != 'deleted' LIMIT {limit:UInt32}",
+            parameters=parameters,
+        ))
+        if request.chapter_id:
+            memberships = result_rows(self.client.query(
+                "SELECT node_id, node_type FROM chapter_node WHERE graph_id = {graph_id:UUID} "
+                "AND chapter_id = {chapter_id:UUID}",
+                parameters={"graph_id": graph_id, "chapter_id": request.chapter_id},
+            ))
+            ids_by_type: dict[str, set[str]] = {
+                "entity": set(), "event": set(), "context": set(), "knowledge_element": set(), "relation": set()
+            }
+            for membership in memberships:
+                ids_by_type[membership["node_type"]].add(str(membership["node_id"]))
+            entities = [item for item in entities if str(item["id"]) in ids_by_type["entity"]]
+            events = [item for item in events if str(item["id"]) in ids_by_type["event"]]
+            contexts = [item for item in contexts if str(item["id"]) in ids_by_type["context"]]
+            elements = [item for item in elements if str(item["id"]) in ids_by_type["knowledge_element"]]
+            statements = [item for item in statements if str(item["id"]) in ids_by_type["knowledge_element"]]
+            relations = [item for item in relations if str(item["id"]) in ids_by_type["relation"]]
         evidence: list[dict[str, Any]] = []
         if request.include_evidence:
             evidence = result_rows(self.client.query(
@@ -43,4 +68,5 @@ class SubgraphService:
                 "FROM evidence AS e INNER JOIN source_segment AS s ON e.source_segment_id = s.id "
                 "WHERE s.graph_id = {graph_id:UUID} LIMIT {limit:UInt32}", parameters=parameters))
         return {"graph_id": graph_id, "viewpoint_entity_id": request.viewpoint_entity_id, "entities": entities,
-                "events": events, "knowledge_elements": elements, "statements": statements, "evidence": evidence}
+                "contexts": contexts,
+                "events": events, "knowledge_elements": elements, "statements": statements, "relations": relations, "evidence": evidence}

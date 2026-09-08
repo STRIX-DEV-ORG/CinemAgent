@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 
 from ..dependencies import get_service, require_api_key
-from ..models import NarrativeGraphCreate, NarrativeGraphResponse
+from ..models import NarrativeGraphCreate, NarrativeGraphResponse, NarrativeGraphUpdate
 from ..service import NarrativeGraphService
 
 
@@ -19,3 +19,9 @@ def create_narrative_graph(request: NarrativeGraphCreate, service: NarrativeGrap
 @router.get("/{graph_id}", response_model=NarrativeGraphResponse)
 def get_narrative_graph(graph_id: UUID, service: NarrativeGraphService = Depends(get_service)) -> NarrativeGraphResponse:
     return service.get_graph(graph_id)
+
+
+@router.patch("/{graph_id}", response_model=NarrativeGraphResponse)
+def update_narrative_graph(graph_id: UUID, request: NarrativeGraphUpdate,
+                           service: NarrativeGraphService = Depends(get_service)) -> NarrativeGraphResponse:
+    return service.update_graph(graph_id, request)

@@ -15,6 +15,9 @@ downloads/
 eggs/
 .eggs/
 lib/
+# The Python packaging ignore above must not hide the SvelteKit source tree.
+!client/src/lib/
+!client/src/lib/**
 lib64/
 parts/
 sdist/
@@ -138,3 +141,11 @@ credentials.json
 # Clickhouse local data directories (if run in dev mode locally)
 ch_data/
 docker_data/
+
+# SvelteKit client
+client/node_modules/
+client/.svelte-kit/
+client/build/
+client/.env
+client/.env.*
+!client/.env.example
