@@ -83,16 +83,17 @@ async def lifespan(app: FastAPI):
                 logger.warning("Narrative projection pass failed", error=str(error))
             await asyncio.sleep(3)
 
-    projection_task = asyncio.create_task(projection_loop())
+    projection_task = asyncio.create_task(projection_loop()) if settings.NARRATIVE_PROJECTOR_IN_PROCESS else None
     yield
     
     # Shutdown actions
     logger.info("Shutting down CinemAgent...")
-    projection_task.cancel()
-    try:
-        await projection_task
-    except asyncio.CancelledError:
-        pass
+    if projection_task:
+        projection_task.cancel()
+        try:
+            await projection_task
+        except asyncio.CancelledError:
+            pass
     if orchestrator and hasattr(orchestrator, 'mcp_manager') and orchestrator.mcp_manager:
         await orchestrator.mcp_manager.close_all()
 

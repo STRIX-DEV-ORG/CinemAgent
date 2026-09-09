@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from ..models import OperationType
+from src.config import settings
 from .common import result_rows
 
 
@@ -179,7 +180,7 @@ class OperationMaterializer:
                 self._apply_operation(operation)
                 self.client.command(f"ALTER TABLE graph_operation UPDATE status = 'applied', applied_at = now64(3) WHERE id = '{operation['id']}'")
             self.client.command(f"ALTER TABLE operation_batch UPDATE status = 'applied', updated_at = now64(3) WHERE id = '{batch_id}'")
-            if self.projections:
+            if self.projections and settings.NARRATIVE_PROJECTOR_IN_PROCESS:
                 self.projections.project_graph(graph_id)
         except Exception as error:
             self.client.command(

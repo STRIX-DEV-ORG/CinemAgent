@@ -56,6 +56,11 @@ def metrics(graph_id: UUID, service: NarrativeGraphService = Depends(get_service
     return service.intelligence.metrics(graph_id)
 
 
+@router.get("/{graph_id}/intelligence")
+def workspace_intelligence(graph_id: UUID, service: NarrativeGraphService = Depends(get_service)) -> dict:
+    return service.intelligence.workspace_snapshot(graph_id)
+
+
 @router.get("/{graph_id}/diagnostics/projection", dependencies=[Depends(require_admin_api_key)])
 def projection_status(graph_id: UUID, service: NarrativeGraphService = Depends(get_service)) -> dict:
     service.graphs.get_graph(graph_id)

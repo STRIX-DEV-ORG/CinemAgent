@@ -306,6 +306,16 @@ class NarrativeIntelligenceService:
         ))
         return {"activity": activity, "agent_runs": runs, "embeddings": embeddings}
 
+    def workspace_snapshot(self, graph_id: UUID) -> dict[str, Any]:
+        """One bounded endpoint for the writer intelligence drawer."""
+        return {
+            "health": self.story_health(graph_id),
+            "presence": self.character_presence(graph_id)[:50],
+            "relation_timeline": self.relation_timeline(graph_id)[:50],
+            "metrics": self.metrics(graph_id),
+            "events": self.events(graph_id, limit=20),
+        }
+
     def diagnostics(self) -> dict[str, Any]:
         """Developer-only ClickHouse service health, without relying on Cloud system-table grants."""
         telemetry = result_rows(self.client.query(

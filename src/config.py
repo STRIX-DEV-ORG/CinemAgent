@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     NARRATIVE_ADMIN_API_KEY: str = os.getenv("NARRATIVE_ADMIN_API_KEY", "")
     NARRATIVE_API_URL: str = os.getenv("NARRATIVE_API_URL", "")
     NARRATIVE_READ_PROJECTIONS: bool = os.getenv("NARRATIVE_READ_PROJECTIONS", "false").lower() == "true"
+    NARRATIVE_PROJECTOR_IN_PROCESS: bool = os.getenv("NARRATIVE_PROJECTOR_IN_PROCESS", "false").lower() == "true"
 
     GEMINI_MODEL_VERSION: str = "gemini-3.6-flash"
 
