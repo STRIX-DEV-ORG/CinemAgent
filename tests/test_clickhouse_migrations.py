@@ -15,6 +15,8 @@ def test_create_schema_migration_executes_each_clickhouse_statement():
     assert any("CREATE TABLE IF NOT EXISTS graph_relation" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS narrative_projection_checkpoint" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS narrative_query_telemetry" in statement for statement in statements)
+    assert any("CREATE TABLE IF NOT EXISTS agent_run_stage" in statement for statement in statements)
+    assert any("CREATE TABLE IF NOT EXISTS agent_run_lease" in statement for statement in statements)
 
 
 def test_drop_schema_migration_executes_each_clickhouse_statement():
@@ -26,3 +28,5 @@ def test_drop_schema_migration_executes_each_clickhouse_statement():
     assert len(statements) >= 30
     assert "DROP TABLE IF EXISTS narrative_graph;" in statements
     assert "DROP TABLE IF EXISTS event_effect;" in statements
+    assert "DROP TABLE IF EXISTS agent_run_stage;" in statements
+    assert "DROP TABLE IF EXISTS agent_run_lease;" in statements

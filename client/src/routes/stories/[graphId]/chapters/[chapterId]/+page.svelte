@@ -25,7 +25,7 @@
 	import ToolToggle from '$lib/components/workspace/tool-toggle.svelte';
 	import NodeCreateSidebar from '$lib/components/workspace/node-create-sidebar.svelte';
 	import StoryMenu from '$lib/components/workspace/story-menu.svelte';
-	import { BrainCircuit, PenTool, ClipboardCheck, Search, Image as ImageIcon, Mic, Film, Loader2, CircleHelp } from 'lucide-svelte';
+	import { BrainCircuit, PenTool, ClipboardCheck, Search, Image as ImageIcon, Mic, Film, Loader2, CircleHelp } from '@lucide/svelte';
 
 	let { params } = $props();
 	let chapter = $state<StoryChapter | null>(null);
@@ -315,6 +315,8 @@
 				chapter_id: params.chapterId,
 				scope: 'chapter'
 			});
+			agentOutput = run;
+			agentResultsOpen = false;
 			for (
 				let attempt = 0;
 				attempt < 60 && ['queued', 'running'].includes(run.status);
@@ -322,11 +324,13 @@
 			) {
 				await new Promise((resolve) => setTimeout(resolve, 500));
 				run = await workspaceApi.getAgentRun(params.graphId, run.id);
+				agentOutput = run;
 			}
 			agentOutput = run;
 			agentResultsOpen = group === 'review' || group === 'research';
 			agentRuns = [run, ...agentRuns.filter((item) => item.id !== run.id)].slice(0, 12);
 			if (run.status === 'failed') throw new Error(run.error || 'The agent run failed.');
+			if (run.status === 'cancelled') throw new Error('The agent run was cancelled.');
 			if (run.result.graph_proposals) {
 				proposals = run.result.graph_proposals;
 				proposalSource = group === 'review' ? 'review' : 'analysis';
@@ -351,6 +355,26 @@
 			message = error instanceof Error ? error.message : 'Could not run this AI tool.';
 		} finally {
 			agentRunning = null;
+		}
+	}
+	async function cancelAgentRun() {
+		if (!agentOutput || !['queued', 'running'].includes(agentOutput.status)) return;
+		try {
+			agentOutput = await workspaceApi.cancelAgentRun(params.graphId, agentOutput.id);
+			agentRuns = [agentOutput, ...agentRuns.filter((item) => item.id !== agentOutput?.id)].slice(0, 12);
+			message = 'Agent run cancelled.';
+		} catch (error) {
+			message = error instanceof Error ? error.message : 'Could not cancel this run.';
+		}
+	}
+	async function retryAgentRun() {
+		if (!agentOutput || agentOutput.status !== 'failed') return;
+		try {
+			agentOutput = await workspaceApi.retryAgentRun(params.graphId, agentOutput.id);
+			agentRuns = [agentOutput, ...agentRuns.filter((item) => item.id !== agentOutput?.id)].slice(0, 12);
+			message = 'Agent retry queued.';
+		} catch (error) {
+			message = error instanceof Error ? error.message : 'Could not retry this run.';
 		}
 	}
 	function toggleStoryboardSelection(sceneId: string) {
@@ -1234,10 +1258,13 @@
 						<Badge variant={agentOutput.status === 'failed' ? 'destructive' : 'outline'}
 							>{agentOutput.status}</Badge
 						>
+						{#if ['queued', 'running'].includes(agentOutput.status)}<Button size="sm" variant="outline" onclick={() => void cancelAgentRun()}>Cancel</Button>{/if}
+						{#if agentOutput.status === 'failed'}<Button size="sm" variant="outline" onclick={() => void retryAgentRun()}>Retry</Button>{/if}
 						<Button size="sm" variant="ghost" onclick={dismissAgentResults}>Close results</Button>
 					</div>
 				</div>
-				{#if agentOutput.result.stages?.length}<p class="mt-2 text-xs text-muted-foreground">
+				{#if agentOutput.stale}<p class="mt-2 rounded border border-amber-500/40 bg-amber-50 p-2 text-xs text-amber-900">This result was generated from an older chapter revision. Run the agent again before applying it.</p>{/if}
+				{#if agentOutput.stages?.length}<div class="mt-2 flex flex-wrap gap-1 text-xs text-muted-foreground">{#each agentOutput.stages as stage (stage.name)}<span class="rounded border px-1.5 py-0.5">{stage.name.replaceAll('_', ' ')}: {stage.status}</span>{/each}</div>{:else if agentOutput.result.stages?.length}<p class="mt-2 text-xs text-muted-foreground">
 						Stages: {agentOutput.result.stages
 							.map((stage) => stage.replaceAll('_', ' '))
 							.join(' · ')}

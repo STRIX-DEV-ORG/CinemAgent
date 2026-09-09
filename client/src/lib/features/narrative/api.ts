@@ -379,6 +379,10 @@ export const workspaceApi = {
 		}),
 	getAgentRun: (graphId: string, runId: string) =>
 		request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}`)),
+	cancelAgentRun: (graphId: string, runId: string) =>
+		request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}:cancel`), { method: 'POST' }),
+	retryAgentRun: (graphId: string, runId: string) =>
+		request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}:retry`), { method: 'POST' }),
 	listAgentRuns: (graphId: string, chapterId?: string) =>
 		request<AgentRun[]>(
 			workspacePath(graphId, `/agent-runs${chapterId ? `?chapter_id=${chapterId}` : ''}`)

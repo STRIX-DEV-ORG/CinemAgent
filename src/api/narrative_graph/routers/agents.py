@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, status
 from fastapi.responses import StreamingResponse
 
 from ..dependencies import get_service, require_api_key
+from src.config import settings
 from ..models import AgentRunCreate, AgentRunResponse, AgentRunReview, StoryboardDecision
 from ..service import NarrativeGraphService
 
@@ -16,7 +17,8 @@ router = APIRouter(prefix="/v1/narrative-graphs", dependencies=[Depends(require_
 async def start_agent_run(graph_id: UUID, request: AgentRunCreate, background_tasks: BackgroundTasks,
                           service: NarrativeGraphService = Depends(get_service)) -> AgentRunResponse:
     run = service.agents.start(graph_id, request)
-    background_tasks.add_task(service.agents.execute, graph_id, run.id)
+    if settings.NARRATIVE_AGENT_WORKER_IN_PROCESS:
+        background_tasks.add_task(service.agents.execute, graph_id, run.id)
     return run
 
 
@@ -30,6 +32,21 @@ def list_agent_runs(graph_id: UUID, chapter_id: UUID | None = None,
 def get_agent_run(graph_id: UUID, run_id: UUID,
                   service: NarrativeGraphService = Depends(get_service)) -> AgentRunResponse:
     return service.agents.get(graph_id, run_id)
+
+
+@router.post("/{graph_id}/agent-runs/{run_id}:cancel", response_model=AgentRunResponse)
+def cancel_agent_run(graph_id: UUID, run_id: UUID,
+                     service: NarrativeGraphService = Depends(get_service)) -> AgentRunResponse:
+    return service.agents.cancel(graph_id, run_id)
+
+
+@router.post("/{graph_id}/agent-runs/{run_id}:retry", response_model=AgentRunResponse, status_code=status.HTTP_202_ACCEPTED)
+def retry_agent_run(graph_id: UUID, run_id: UUID, background_tasks: BackgroundTasks,
+                    service: NarrativeGraphService = Depends(get_service)) -> AgentRunResponse:
+    run = service.agents.retry(graph_id, run_id)
+    if settings.NARRATIVE_AGENT_WORKER_IN_PROCESS:
+        background_tasks.add_task(service.agents.execute, graph_id, run_id)
+    return run
 
 
 @router.get("/{graph_id}/agent-runs/{run_id}/stream")
@@ -46,7 +63,7 @@ async def stream_agent_run(graph_id: UUID, run_id: UUID,
             if payload != last:
                 last = payload
                 yield f"data: {payload}\n\n"
-            if run.status in {"completed", "failed", "reviewed"}:
+            if run.status in {"completed", "failed", "reviewed", "cancelled"}:
                 return
             await asyncio.sleep(0.5)
 

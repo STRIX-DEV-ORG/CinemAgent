@@ -1,9 +1,12 @@
 """Durable, writer-facing adapters for the existing CinemAgent agents."""
 from __future__ import annotations
 
+import asyncio
 import json
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID, NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import HTTPException
 
@@ -13,8 +16,9 @@ from src.agent.scenographer_agent import scenographer_executor
 from src.agent.searcher_agent import searcher_investigator_executor
 from src.agent.tools.pdf_generator import ScreenplayPDFGenerator
 
-from ..models import AgentRunCreate, AgentRunResponse, AgentRunReview, ChapterDocumentUpdate
+from ..models import AgentRunCreate, AgentRunResponse, AgentRunReview, AgentRunStage, ChapterDocumentUpdate
 from .common import result_rows
+from .writer_orchestrator import WriterOrchestrator
 
 
 class AgentRunService:
@@ -30,6 +34,7 @@ class AgentRunService:
         self.workspace = workspace
         self.graphs = graphs
         self.intelligence: Any | None = None
+        self.orchestrator = WriterOrchestrator()
 
     def _chapter_voice_cast(self, graph_id: UUID, chapter_id: UUID) -> tuple[dict[str, str], dict[str, str]]:
         """Return stable voice presets and entity IDs for chapter characters."""
@@ -97,7 +102,10 @@ class AgentRunService:
         if request.chapter_id:
             self.workspace.get_chapter(graph_id, request.chapter_id)
         run_id = uuid4()
-        payload = {"instruction": request.instruction, "options": request.options}
+        source_revision = None
+        if request.chapter_id:
+            source_revision = self.workspace.get_chapter(graph_id, request.chapter_id).revision
+        payload = {"instruction": request.instruction, "options": request.options, "source_revision": source_revision}
         self.client.insert(
             "agent_run",
             [[run_id, graph_id, request.chapter_id, request.agent_group, request.scope, json.dumps(payload, default=str), "queued", 0, "Queued", None, json.dumps({})]],
@@ -124,7 +132,32 @@ class AgentRunService:
         return row
 
     def get(self, graph_id: UUID, run_id: UUID) -> AgentRunResponse:
-        return AgentRunResponse(**self._row(graph_id, run_id))
+        row = self._row(graph_id, run_id)
+        result = row.get("result", {})
+        source_revision = row.get("input", {}).get("source_revision")
+        stale = False
+        if row.get("chapter_id") and source_revision is not None:
+            stale = self.workspace.get_chapter(graph_id, row["chapter_id"]).revision != source_revision
+        return AgentRunResponse(**row, attempt=int(result.get("retry_count", 0)) + 1,
+                                source_revision=source_revision, stale=stale,
+                                stages=[AgentRunStage(**stage) for stage in self._stage_states(row["id"], int(result.get("retry_count", 0)) + 1)])
+
+    def cancel(self, graph_id: UUID, run_id: UUID) -> AgentRunResponse:
+        row = self._row(graph_id, run_id)
+        if row["status"] not in {"queued", "running"}:
+            raise HTTPException(status_code=409, detail="only queued or running runs can be cancelled")
+        self._update(row, status="cancelled", progress=row["progress"], message="Cancelled by writer")
+        return self.get(graph_id, run_id)
+
+    def retry(self, graph_id: UUID, run_id: UUID) -> AgentRunResponse:
+        row = self._row(graph_id, run_id)
+        if row["status"] != "failed":
+            raise HTTPException(status_code=409, detail="only failed runs can be retried")
+        result = dict(row.get("result", {}))
+        result["retry_count"] = int(result.get("retry_count", 0)) + 1
+        result["stage_runs"] = []
+        self._update(row, status="queued", progress=0, message="Queued for retry", result=result, error=None)
+        return self.get(graph_id, run_id)
 
     def save_storyboards(self, graph_id: UUID, run_id: UUID, selected_scene_ids: list[str]) -> AgentRunResponse:
         row = self._row(graph_id, run_id)
@@ -172,7 +205,49 @@ class AgentRunService:
                 row["result"] = json.loads(row["result"] or "{}")
             if isinstance(row.get("input"), str):
                 row["input"] = json.loads(row["input"] or "{}")
-        return [AgentRunResponse(**row) for row in rows]
+        return [self.get(graph_id, row["id"]) for row in rows]
+
+    def _stage_states(self, run_id: UUID, attempt: int) -> list[dict[str, Any]]:
+        rows = result_rows(self.client.query(
+            "SELECT name, argMax(attempt, occurred_at) AS attempt, argMax(status, occurred_at) AS status, argMax(progress, occurred_at) AS progress, "
+            "argMax(message, occurred_at) AS message, argMax(error, occurred_at) AS error, "
+            "argMax(output, occurred_at) AS output, argMax(input_fingerprint, occurred_at) AS input_fingerprint "
+            "FROM agent_run_stage WHERE run_id = {run_id:UUID} AND attempt <= {attempt:UInt32} GROUP BY name ORDER BY min(occurred_at)",
+            parameters={"run_id": run_id, "attempt": attempt},
+        ))
+        for item in rows:
+            if isinstance(item.get("output"), str):
+                item["output"] = json.loads(item["output"] or "{}")
+        return rows
+
+    def _update_stage(self, row: dict[str, Any], *, stage: str, stage_status: str, progress: int,
+                      message: str, fingerprint: str, output: dict[str, Any] | None = None,
+                      error: str | None = None) -> None:
+        attempt = int(row.get("attempt", 1))
+        token = row.get("lease_token") or uuid4()
+        self.client.insert("agent_run_stage", [[row["id"], row["graph_id"], row.get("chapter_id"), attempt, token,
+            stage, stage_status, progress, message, fingerprint, json.dumps(output or {}, default=str), error]],
+            column_names=["run_id", "graph_id", "chapter_id", "attempt", "lease_token", "name", "status", "progress", "message", "input_fingerprint", "output", "error"])
+        self._update(row, status="running", progress=progress, message=message)
+
+    def _is_cancelled(self, graph_id: UUID, run_id: UUID) -> bool:
+        return self._row(graph_id, run_id)["status"] == "cancelled"
+
+    def _claim(self, row: dict[str, Any]) -> dict[str, Any] | None:
+        """Cooperative ClickHouse lease; effects remain idempotent if a race occurs."""
+        token, worker_id = uuid4(), os.getenv("NARRATIVE_AGENT_WORKER_ID", f"worker-{os.getpid()}")
+        attempt = int(row.get("result", {}).get("retry_count", 0)) + 1
+        expires = datetime.now(timezone.utc) + timedelta(minutes=10)
+        self.client.insert("agent_run_lease", [[row["id"], row["graph_id"], attempt, worker_id, token, expires]],
+                           column_names=["run_id", "graph_id", "attempt", "worker_id", "lease_token", "expires_at"])
+        latest = result_rows(self.client.query(
+            "SELECT lease_token, expires_at FROM agent_run_lease WHERE run_id = {run_id:UUID} AND attempt = {attempt:UInt32} "
+            "ORDER BY claimed_at DESC LIMIT 1", parameters={"run_id": row["id"], "attempt": attempt}))
+        if not latest or latest[0]["lease_token"] != token:
+            return None
+        row = dict(row)
+        row["attempt"], row["lease_token"] = attempt, token
+        return row
 
     def _update(self, row: dict[str, Any], *, status: str, progress: int, message: str, result: dict[str, Any] | None = None, error: str | None = None) -> None:
         self.client.insert(
@@ -186,13 +261,34 @@ class AgentRunService:
 
     async def execute(self, graph_id: UUID, run_id: UUID) -> None:
         row = self._row(graph_id, run_id)
+        if row["status"] != "queued":
+            return
+        row = self._claim(row)
+        if row is None:
+            return
         self._update(row, status="running", progress=5, message="Preparing narrative context")
         try:
             chapter = self.workspace.get_chapter(graph_id, row["chapter_id"]) if row.get("chapter_id") else None
-            result = await self._execute_group(row, chapter)
+            result = await self.orchestrator.run(row, chapter, self._execute_group, self._update_stage,
+                                                 self._stage_states, lambda: self._is_cancelled(graph_id, run_id))
+            if self._is_cancelled(graph_id, run_id):
+                return
+            result["retry_count"] = int(row.get("result", {}).get("retry_count", 0))
             self._update(row, status="completed", progress=100, message="Ready for review", result=result)
+        except asyncio.CancelledError:
+            self._update(row, status="cancelled", progress=row.get("progress", 0), message="Cancelled by writer")
         except Exception as error:  # Keep failures visible and retryable in the writer UI.
             self._update(row, status="failed", progress=100, message="Agent run failed", error=str(error))
+
+    async def execute_queued(self, limit: int = 10) -> int:
+        """Worker entry point; each completed row is safe to observe/retry."""
+        rows = result_rows(self.client.query(
+            "SELECT id, graph_id FROM agent_run WHERE status = 'queued' ORDER BY created_at LIMIT {limit:UInt32}",
+            parameters={"limit": limit},
+        ))
+        for item in rows:
+            await self.execute(item["graph_id"], item["id"])
+        return len(rows)
 
     async def _execute_group(self, row: dict[str, Any], chapter: Any) -> dict[str, Any]:
         group = row["agent_group"]
@@ -442,7 +538,16 @@ class AgentRunService:
         }
 
     def _save_artifact(self, row: dict[str, Any], kind: str, title: str, storage_url: str, mime_type: str, metadata: dict[str, Any]) -> UUID:
-        artifact_id = uuid4()
+        key = f"{row['id']}:{kind}:{title}:{storage_url}"
+        existing = result_rows(self.client.query(
+            "SELECT id FROM agent_artifact WHERE graph_id = {graph_id:UUID} AND run_id = {run_id:UUID} "
+            "AND JSONExtractString(metadata, 'idempotency_key') = {key:String} LIMIT 1",
+            parameters={"graph_id": row["graph_id"], "run_id": row["id"], "key": key},
+        ))
+        if existing:
+            return existing[0]["id"]
+        artifact_id = uuid5(NAMESPACE_URL, key)
+        metadata = {**metadata, "idempotency_key": key}
         self.client.insert("agent_artifact", [[artifact_id, row["id"], row["graph_id"], row.get("chapter_id"), kind, title, storage_url, mime_type, json.dumps(metadata, default=str)]], column_names=["id", "run_id", "graph_id", "chapter_id", "kind", "title", "storage_url", "mime_type", "metadata"])
         return artifact_id
 
@@ -460,6 +565,11 @@ class AgentRunService:
 
     def review(self, graph_id: UUID, run_id: UUID, request: AgentRunReview) -> AgentRunResponse:
         row = self._row(graph_id, run_id)
+        source_revision = row.get("input", {}).get("source_revision")
+        if row.get("chapter_id") and source_revision is not None:
+            current = self.workspace.get_chapter(graph_id, row["chapter_id"])
+            if current.revision != source_revision:
+                raise HTTPException(status_code=409, detail="This output is stale because the chapter changed. Run the agent again before applying it.")
         result = row.get("result", {})
         accepted = set(request.accepted_text_ids)
         patches = [item for item in result.get("text_patches", []) if str(item.get("id")) in accepted]
