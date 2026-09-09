@@ -1,235 +1,154 @@
 # CinemAgent 🎬🔍
 
-A modular, production-ready Agentic RAG (Retrieval-Augmented Generation) system integrated with a **Knowledge Graph** stored in **ClickHouse** and parallelized client access to **Model Context Protocol (MCP)** servers, including a Search MCP. Designed for horizontal scalability and native deployment on Google Cloud Platform.
+> An AI-assisted narrative workspace where writers turn a vague draft into a living, production-ready story canon—and use that canon to write what comes next.
 
-> **Project overview for judges and contributors:** [read the CinemAgent narrative and local demo guide](documentation/README.md). It explains the writer-first product, the two-panel canvas, Google ADK agents, ClickHouse event/semantic architecture, and the local end-to-end workflow.
+## Overview
+**CinemAgent** is a modular, production-ready Agentic RAG system that transforms unstructured, vague story drafts into a structured **Knowledge Graph** stored in **ClickHouse**. Writers do not just need a model that continues text. They need a way to retain the characters, places, events, and visual ideas that accumulate while a story changes. CinemAgent makes that working memory visible as an editable narrative graph, proving how agents can simplify complex creative structures into production-ready artifacts.
+
+**This is a prototype.** Gemini image and speech generation require an active Gemini key with available quota.
 
 ---
 
-## 🏛️ System Architecture
+## 💡 Inspiration
+A story rarely exists in one place. A writer may have a chapter draft, a note about a character's motivation, a contradictory description of a setting, and an idea for a later scene—all at once. The hard part is not only producing more prose; it is remembering what is already true, deciding what should become true, and seeing how a change affects the rest of the narrative.
+
+Inspired by how difficult it is to maintain continuity in complex world-building, we wanted to create an intelligent co-author. Instead of just acting as a text-generation bot, we envisioned an agentic system that understands the *structure* of a story. CinemAgent treats a story as both text and a navigable canon. It is not a RAG demo with a graph attached; the graph is the writer's workspace.
+
+---
+
+## 🎮 What it does
+
+### A two-panel narrative canvas
+The client is a desktop-first SvelteKit application. The persistent left toolbar manages stories and AI tools. The main workspace has two coordinated panels:
+- **Left panel:** The current story or chapter text, AI results, or the editable form for the selected graph item.
+- **Right panel:** An interactive chapter timeline or focused narrative graph. 
+
+### From Vague History to Structured Graph (Reviewable AI)
+The writer can ask CinemAgent to extract graph proposals from vague chapter text. Proposals include meaningful names, descriptions, content, and relations so the result is not a collection of isolated labels. The writer can apply selected proposals or close the results without changing the canon. The AI makes proposals, but the writer remains the editor.
+
+### Production artifacts from a chapter
+CinemAgent can turn a chapter into production-oriented material:
+- **Storyboards:** Identifies scenes and prepares image prompts grounded in characters and settings already in the chapter canon using Gemini.
+- **Audio & Dialogue:** Extracts dialogue and narration from vague prose, generating tracks for speakers and narrators using TTS models.
+
+---
+
+## ⚙️ How it was built
+
+### Tech Stack
+- **Backend:** Python 3.11+, FastAPI, Pydantic, Google ADK
+- **Frontend:** SvelteKit, TypeScript, Tailwind CSS, shadcn-svelte
+- **Database/Storage:** ClickHouse (Vector Storage, Event Sourcing, Telemetry)
+- **AI/Agents:** Gemini text, image, and TTS models, specialized story executors
+
+### System Overview & Key Paradigms
 
 ```mermaid
-graph TD
-    User([User / API Request]) --> Main[FastAPI Server / main.py]
-    Main --> Agent[Agent Orchestrator]
-    
-    subgraph Core Agent Loop
-        Agent --> Prompts[Prompt Builder]
-        Agent --> Executor[Tool Executor]
-    end
-
-    subgraph MCP Client Gateway
-        Executor --> MCP[MCP Client Manager]
-        MCP --> SearchMCP[Search MCP Server]
-        MCP --> OtherMCPs[Other Tool MCPs]
-    end
-
-    subgraph Context & Retrieval
-        Agent --> RAG[RAG Pipeline]
-        RAG --> Embedder[Embedder Service]
-        RAG --> RetrievalOrch[Retrieval Orchestrator]
-        RetrievalOrch --> VectorSearch[Vector Retrieval]
-        RetrievalOrch --> GraphRetrieval[Knowledge Graph Query]
-    end
-
-    subgraph Storage Layer
-        VectorSearch --> ClickHouse[(ClickHouse DB)]
-        GraphRetrieval --> ClickHouse
-        ClickHouse -.-> NodesEdges[Nodes & Edges Table]
-        ClickHouse -.-> VectorsTable[Embeddings Table]
-    end
+flowchart LR
+    W[Writer] --> C[SvelteKit + TypeScript client]
+    C --> P[Server-side /api proxy]
+    P --> A[FastAPI narrative API]
+    A --> G[Story, chapter, node, and relation services]
+    A --> Q[Durable agent-run queue]
+    Q --> AW[Dedicated agent worker]
+    AW --> ADK[Google ADK writer orchestration]
+    ADK --> GM[Gemini text, image, and TTS models]
+    G --> CH[(ClickHouse)]
+    Q --> CH
+    CH --> E[Immutable narrative events]
+    CH --> PR[Chapter/node/relation projections]
+    CH --> V[Semantic canon embeddings]
+    CH --> T[Agent activity and query telemetry]
+    PW[Dedicated projector worker] --> CH
 ```
+
+#### Why ClickHouse?
+ClickHouse is more than a database behind this project. It supports the narrative workflow in several ways:
+- **Event-derived state:** Writer changes append to `narrative_event`. A checkpointed projector builds chapter, node, and relation read models.
+- **Semantic canon:** Story material is embedded into `narrative_embedding`; semantic search uses vector distance to surface related canon.
+- **Agent durability:** `agent_run`, stage, lease, and artifact data make long-running AI work inspectable and retryable.
+
+#### Agent Orchestration and Writer Control
+The API queues a writer-agent run, while a dedicated worker claims it with a durable lease. **Google ADK** orchestrates the complex `text-to-graph` and `graph-to-text` workflows. Specialized executors handle visual, voice, research, and production stages. 
 
 ---
 
-## 📂 Repository Structure
-
-The code is structured cleanly inside the `src/` directory to ensure clean packaging and simple dependency imports:
-
-* **`src/agent/`**: The brain of the application. Contains the execution loop, prompts, tools binding, and planning logic.
-* **`src/db/`**: Handles connectivity, schemas, migration, and raw client interface for **ClickHouse**.
-* **`src/graph/`**: Manages entity/relationship ingestion, Graph RAG query construction, and graph traversal.
-* **`src/mcp/`**: Implements the Model Context Protocol client to interact with external tools and search engines.
-* **`src/rag/`**: Orchestrates text chunking, embedding generation, semantic search, and prompt context building.
-* **`src/config.py`**: Validates and loads environmental configuration via Pydantic Settings.
-* **`src/main.py`**: The application bootstrap file. Exposes a FastAPI application and background worker hooks.
+## ⭐️ Accomplishments that we are proud of
+1. **Structuring Creative Chaos:** Successfully building a workflow where a writer can move in both directions between vague prose and structured narrative knowledge.
+2. **Interactive Graph UI:** The graph is not an abstract backend artifact; it is a navigable, editable part of the authoring interface with chapter context and visual differentiation.
+3. **ClickHouse as the Ultimate Brain:** Leveraging ClickHouse for durable story events, projections, semantic canon retrieval, run history, and observability all at once.
+4. **Durable Agent Architecture:** Building an agent layer that is durable and visible, making complex generation stages recoverable instead of tied to a single fragile browser request.
 
 ---
 
-## ⚙️ Configuration Variables
-
-Configuration is loaded from environment variables or a local `.env` file. Key variables include:
-
-| Environment Variable | Description | Default |
-|----------------------|-------------|---------|
-| `CLICKHOUSE_HOST` | Hostname of the ClickHouse server | `localhost` |
-| `CLICKHOUSE_PORT` | Port of the ClickHouse server | `9000` |
-| `CLICKHOUSE_USER` | Username for authentication | `default` |
-| `CLICKHOUSE_PASSWORD` | Password for authentication | `""` |
-| `CLICKHOUSE_DATABASE` | Database name for CinemAgent | `cinemagent` |
-| `SEARCH_MCP_URL` | Endpoint of the Search MCP server | `http://localhost:8000` |
-| `GCP_PROJECT_ID` | Google Cloud Project ID | `""` |
-| `GCP_LOCATION` | Region for GCP deployment | `us-central1` |
-| `GEMINI_API_KEY` | API Key for Gemini Models (Google GenAI) | `""` |
-| `PORT` | Listening port for the application | `8080` |
-| `NARRATIVE_API_KEY` | Bearer token required by narrative graph endpoints | `""` |
-| `NARRATIVE_ADMIN_API_KEY` | Separate bearer token for projection replay and diagnostics | Falls back to `NARRATIVE_API_KEY` |
-| `NARRATIVE_READ_PROJECTIONS` | Read chapter state from event-derived projections after parity checks | `false` |
+## 📚 What we learned
+- **Inspectable AI is Better AI:** AI is most helpful to writers when it makes its reasoning inspectable and its changes reversible. Presenting graph proposals instead of silent text rewrites was a game-changer.
+- **Context is King:** A story graph needs chapter-local relevance and global reuse. Either one alone makes the canon harder to work with.
+- **Production Grounding:** Storyboards and narration are exponentially more useful when grounded in the chapter and its connected story facts, preventing hallucinations.
 
 ---
 
-## Narrative Graph API
-
-The writer UI and ADK agents share the authenticated `/v1/narrative-graphs` API. Create a graph first, submit validated operations as an idempotent batch, poll the batch until it is `applied`, and then retrieve a focused subgraph for entity resolution or prose generation.
-
-```bash
-# Create a story graph
-curl -X POST http://localhost:8080/v1/narrative-graphs \
-  -H "Authorization: Bearer $NARRATIVE_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"The Silent Throne"}'
-
-# Submit operations produced by the validation agent
-curl -X POST "http://localhost:8080/v1/narrative-graphs/GRAPH_UUID/operation-batches" \
-  -H "Authorization: Bearer $NARRATIVE_API_KEY" \
-  -H "Idempotency-Key: ingestion-segment-001" \
-  -H "Content-Type: application/json" \
-  -d '{"operations":[{"id":"OPERATION_UUID","operation_type":"create_entity","origin":"agent","payload":{"id":"ENTITY_UUID","name":"Elena","type":"character","status":"active","metadata":{}},"provenance":{"segment_id":"seg_001"}}]}'
-```
-
-Use `GET /{graph_id}/operation-batches/{batch_id}` to poll write status. Use `POST /{graph_id}/subgraph:query` with entity/event anchors and an optional `viewpoint_entity_id` to obtain the restricted graph context used by retrieval and generation agents.
-
-### ClickHouse narrative projections
-
-Writer changes are appended to `narrative_event`; a checkpointed projector builds versioned chapter, node, relation, and membership read models. It resumes safely after restarts and can run in-process or as a dedicated worker:
-
-```bash
-python -m src.narrative_projector
-```
-
-Deploy this worker separately from the API in Cloud Run using `Dockerfile.projector`; it uses the same ClickHouse checkpoint table and is safe to restart. Deleted stories are hidden immediately, restorable for 30 days through `POST /{graph_id}:restore`, and then purged by the worker.
-
-Writer agent runs use a separate durable worker too. Deploy `Dockerfile.agent-worker` or run it locally with:
-
-```bash
-python -m src.narrative_agent_worker
-```
-
-The API only queues agent runs by default. Set `NARRATIVE_AGENT_WORKER_IN_PROCESS=true` for a local single-process setup; production should keep it false and run the worker separately.
-
-Storyboard and narration use dedicated Gemini media models (`GEMINI_IMAGE_MODEL=gemini-3.1-flash-image` and `GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts`). They fail visibly when Gemini is unavailable or out of credits, rather than storing a placeholder image or synthetic tone. Set `GEMINI_MEDIA_ALLOW_FALLBACK=true` only for an intentional offline demo.
-
-Before enabling `NARRATIVE_READ_PROJECTIONS=true`, an administrator should bootstrap existing stories and compare projected reads with the legacy tables. The protected endpoints `POST /{graph_id}/diagnostics/projection:bootstrap`, `POST /{graph_id}/diagnostics/projection:replay`, and `GET /{graph_id}/diagnostics/projection` support that migration. `GET /diagnostics/clickhouse` exposes developer-only projection, storage, and query-telemetry health.
+## 🚀 What's next for CinemAgent
+1. **Collaboration:** Add collaboration, authorship, and review roles so a writing team can discuss and approve canon changes together.
+2. **Expanded Export Workflows:** Expand export workflows from chapter production into screenplays, shot-lists, and writers-room formats.
+3. **Advanced RAG Analytics:** Build evaluation datasets for extraction quality, relation coverage, and continuity findings to continuously improve the ADK workflows.
+4. **Cloud Native Deployments:** Deploy API, projector, and agent workers independently with production observability and managed provider quotas.
 
 ---
 
-## Writer Client
-
-The `client/` workspace is a SvelteKit + TypeScript application for writers. It uses shadcn-svelte components and presents the narrative graph as a shared creative workspace rather than a RAG-only interface. The browser calls same-origin `/api/graphs/...` routes; those SvelteKit server routes add `NARRATIVE_API_KEY` and forward requests to FastAPI, so the key is never shipped to the browser.
-
-1. Create `client/.env` from `client/.env.example` and set the FastAPI URL and narrative API key.
-2. Start the FastAPI service on port `8080`.
-3. Start the client:
-
-   ```bash
-   cd client
-   pnpm install
-   pnpm dev
-   ```
-
-The initial workspace supports creating or opening a graph, retaining recently opened graph IDs only in the browser, submitting a writer-originated `create_entity` operation, polling its materialization status, and inspecting focused graph context. Validate it with `pnpm check`, `pnpm lint`, and `pnpm build`.
-
-To containerize the client, build from the `client/` directory. Supply `FASTAPI_URL` and `NARRATIVE_API_KEY` to the running container (not as public build-time variables):
-
-```bash
-docker build -t cinemagent-client client
-docker run -p 3000:3000 -e FASTAPI_URL=http://host.docker.internal:8080 -e NARRATIVE_API_KEY=your-key cinemagent-client
-```
-
----
-
-## 🚀 Local Setup & Quickstart
+## ⚠️ Instructions for Judges: Run locally
 
 ### Prerequisites
-- Python 3.11+
-- [ClickHouse](https://clickhouse.com/) (either running locally or a Cloud instance)
-- A running Search MCP server (or configure external MCP integrations)
+- Python 3.11 or newer
+- Node.js 20+ and pnpm
+- A ClickHouse instance (ClickHouse Cloud or local)
+- A Gemini API key for Gemini-backed agents and media generation
 
-### Installation
+### 1. Configure the API
+Create a root `.env` file. Use your ClickHouse Cloud endpoint and credentials; do not commit this file.
 
-1. **Clone the repository:**
-   ```bash
-   git clone <repo-url> CinemAgent
-   cd CinemAgent
-   ```
+```dotenv
+PORT=8080
+GEMINI_API_KEY=replace-with-your-gemini-key
+NARRATIVE_API_KEY=choose-a-local-api-token
 
-2. **Create and activate a virtual environment:**
-   ```bash
-   python -m venv .venv
-   # Windows:
-   .venv\Scripts\activate
-   # macOS/Linux:
-   source .venv/bin/activate
-   ```
+CLICKHOUSE_HOST=your-instance.clickhouse.cloud
+CLICKHOUSE_PORT=8443
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=replace-with-your-clickhouse-password
+CLICKHOUSE_SECURE=true
 
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Set up environment variables:**
-   Create a `.env` file in the root directory:
-   ```env
-   GEMINI_API_KEY=your-gemini-api-key
-   CLICKHOUSE_HOST=localhost
-   CLICKHOUSE_PORT=9000
-   CLICKHOUSE_DATABASE=cinemagent
-   SEARCH_MCP_URL=http://localhost:5005
-   ```
-
-5. **Run the FastAPI server locally:**
-   ```bash
-   python src/main.py
-   ```
-   Access the interactive documentation (Swagger UI) at `http://localhost:8080/docs`.
-
----
-
-## ☁️ Google Cloud Deployment
-
-This repository is optimized for deployment to **Google Cloud Run** using Google Cloud Build.
-
-### 1. Build and push image to Artifact Registry
-
-Using Google Cloud Build, you can compile the image directly on the cloud:
-
-```bash
-gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/cinemagent:latest .
+NARRATIVE_PROJECTOR_IN_PROCESS=false
+NARRATIVE_AGENT_WORKER_IN_PROCESS=false
 ```
 
-### 2. Deploy to Google Cloud Run
-
-Deploy the image, passing the necessary environment variables:
-
-```bash
-gcloud run deploy cinemagent \
-  --image gcr.io/YOUR_PROJECT_ID/cinemagent:latest \
-  --platform managed \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars CLICKHOUSE_HOST=YOUR_CLICKHOUSE_HOST,CLICKHOUSE_PORT=YOUR_CLICKHOUSE_PORT,CLICKHOUSE_DATABASE=cinemagent
+Create and activate a virtual environment, then install the server dependencies:
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
 
----
+Start the API, projector, and agent worker in three terminals with the environment activated:
+```powershell
+python -m uvicorn src.main:app --reload --port 8080
+python -m src.narrative_projector
+python -m src.narrative_agent_worker
+```
+> For a single-process local experiment, set both `NARRATIVE_PROJECTOR_IN_PROCESS=true` and `NARRATIVE_AGENT_WORKER_IN_PROCESS=true` and run only the API.
 
-## 🔬 Core Components Deep Dive
+### 2. Configure and run the client
+Create `client/.env` from `client/.env.example`:
+```dotenv
+FASTAPI_URL=http://localhost:8080
+NARRATIVE_API_KEY=choose-a-local-api-token
+```
 
-### 📐 RAG and Knowledge Graph in ClickHouse
-ClickHouse is utilized as a unified storage layer:
-1. **Vector Storage**: Employs ClickHouse's high-performance vector search columns (`Array(Float32)`) combined with ANN indexes (e.g., `VectorSimilarity` index types) for semantic lookup.
-2. **Knowledge Graph**: Stores Graph nodes and directed edges inside unified tables. Graph-RAG queries combine semantic vector search with multi-hop SQL JOINs to extract neighborhood entities and relationships.
+Install and start the SvelteKit application:
+```powershell
+cd client
+pnpm install
+pnpm dev
+```
 
-### 🌐 Model Context Protocol (MCP) Integration
-The MCP integration layer uses the standard protocol client pattern to connect dynamically to:
-- A local or remote **Search MCP server** for real-time web querying and retrieval.
-- Additional custom-configured MCP servers to hook in external toolkits.
+Open the local URL printed by Vite (normally `http://localhost:5173`). Create a story, add a chapter, write a short scene, and run graph extraction to see the text-to-canon workflow!
