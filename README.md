@@ -2,6 +2,8 @@
 
 A modular, production-ready Agentic RAG (Retrieval-Augmented Generation) system integrated with a **Knowledge Graph** stored in **ClickHouse** and parallelized client access to **Model Context Protocol (MCP)** servers, including a Search MCP. Designed for horizontal scalability and native deployment on Google Cloud Platform.
 
+> **Project overview for judges and contributors:** [read the CinemAgent narrative and local demo guide](documentation/README.md). It explains the writer-first product, the two-panel canvas, Google ADK agents, ClickHouse event/semantic architecture, and the local end-to-end workflow.
+
 ---
 
 ## 🏛️ System Architecture
