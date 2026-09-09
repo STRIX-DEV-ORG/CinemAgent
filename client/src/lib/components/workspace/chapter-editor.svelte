@@ -42,7 +42,7 @@
 		const next = JSON.stringify(document);
 		if (!editor || next === lastDocument) return;
 		lastDocument = next;
-		editor.commands.setContent(document, { emitUpdate: false });
+		//editor.commands.setContent(document, { emitUpdate: false });
 	});
 
 	$effect(() => {

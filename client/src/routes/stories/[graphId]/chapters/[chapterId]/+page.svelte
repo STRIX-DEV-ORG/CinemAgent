@@ -209,10 +209,10 @@
 		message = '';
 		try {
 			const [loadedChapter, loadedSubgraph, loadedChapters, loadedRuns] = await Promise.all([
-				workspaceApi.getChapter(graphId, chapterId),
+				workspaceApi.chapters.get(graphId, chapterId),
 				narrativeApi.querySubgraph(graphId, false, [], chapterId),
-				workspaceApi.listChapters(graphId),
-				workspaceApi.listAgentRuns(graphId, chapterId)
+				workspaceApi.chapters.list(graphId),
+				workspaceApi.agents.listRuns(graphId, chapterId)
 			]);
 			if (version !== loadVersion) return;
 			chapter = loadedChapter;
@@ -250,7 +250,7 @@
 		saveState = 'saving';
 		saveTimer = setTimeout(async () => {
 			try {
-				chapter = await workspaceApi.saveDocument(
+				chapter = await workspaceApi.chapters.saveDocument(
 					params.graphId,
 					params.chapterId,
 					document,
@@ -272,9 +272,9 @@
 		}
 		analyzing = true;
 		try {
-			const run = await workspaceApi.startAnalysis(params.graphId, params.chapterId);
+			const run = await workspaceApi.analysis.start(params.graphId, params.chapterId);
 			runId = run.id;
-			proposals = await workspaceApi.getProposals(params.graphId, params.chapterId, run.id);
+			proposals = await workspaceApi.analysis.getProposals(params.graphId, params.chapterId, run.id);
 			proposalSource = 'analysis';
 			selectedProposalIds = proposals
 				.filter((proposal) => proposal.status === 'proposed')
@@ -296,7 +296,7 @@
 		}
 		proposingText = true;
 		try {
-			textProposals = await workspaceApi.suggestText(params.graphId, params.chapterId);
+			textProposals = await workspaceApi.analysis.suggestText(params.graphId, params.chapterId);
 			message = textProposals.length
 				? `${textProposals.length} graph-grounded prose suggestions are ready for review.`
 				: 'The current draft already covers the available chapter graph details.';
@@ -310,7 +310,7 @@
 		if (!chapter || agentRunning) return;
 		agentRunning = group;
 		try {
-			let run = await workspaceApi.startAgentRun(params.graphId, {
+			let run = await workspaceApi.agents.startRun(params.graphId, {
 				agent_group: group,
 				chapter_id: params.chapterId,
 				scope: 'chapter'
@@ -321,7 +321,7 @@
 				attempt += 1
 			) {
 				await new Promise((resolve) => setTimeout(resolve, 500));
-				run = await workspaceApi.getAgentRun(params.graphId, run.id);
+				run = await workspaceApi.agents.getRun(params.graphId, run.id);
 			}
 			agentOutput = run;
 			agentResultsOpen = group === 'review' || group === 'research';
@@ -362,7 +362,7 @@
 		if (!agentOutput || !selectedStoryboardIds.length || savingStoryboards) return;
 		savingStoryboards = true;
 		try {
-			const updated = await workspaceApi.saveStoryboards(
+			const updated = await workspaceApi.agents.saveStoryboards(
 				params.graphId,
 				agentOutput.id,
 				selectedStoryboardIds
@@ -385,7 +385,7 @@
 		selectedStoryboardIds = [];
 		savingStoryboards = true;
 		try {
-			const updated = await workspaceApi.saveStoryboards(params.graphId, agentOutput.id, []);
+			const updated = await workspaceApi.agents.saveStoryboards(params.graphId, agentOutput.id, []);
 			agentOutput = updated;
 			agentRuns = [updated, ...agentRuns.filter((item) => item.id !== updated.id)].slice(0, 12);
 			message = 'Generated storyboard images were discarded.';
@@ -409,7 +409,7 @@
 		const plainText = [chapter.plain_text, proposal.text].filter(Boolean).join('\n\n');
 		saveState = 'saving';
 		try {
-			chapter = await workspaceApi.saveDocument(
+			chapter = await workspaceApi.chapters.saveDocument(
 				params.graphId,
 				params.chapterId,
 				document,
@@ -427,7 +427,7 @@
 	async function acceptAgentPatches() {
 		if (!agentOutput?.result.text_patches?.length) return;
 		try {
-			agentOutput = await workspaceApi.reviewAgentRun(
+			agentOutput = await workspaceApi.agents.reviewRun(
 				params.graphId,
 				agentOutput.id,
 				agentOutput.result.text_patches.map((patch) => patch.id)
@@ -444,7 +444,7 @@
 		applyingProposals = true;
 		message = `Adding ${selectedProposalIds.length} graph proposal(s)…`;
 		try {
-			const batch = await workspaceApi.applyProposals(
+			const batch = await workspaceApi.analysis.applyProposals(
 				params.graphId,
 				params.chapterId,
 				runId,
@@ -532,7 +532,7 @@
 		if (!chapter || !chapterTitleDraft.trim()) return;
 		savingChapterTitle = true;
 		try {
-			chapter = await workspaceApi.updateChapter(params.graphId, params.chapterId, {
+			chapter = await workspaceApi.chapters.update(params.graphId, params.chapterId, {
 				title: chapterTitleDraft.trim()
 			});
 			chapters = chapters.map((item) => (item.id === chapter!.id ? chapter! : item));
@@ -549,7 +549,7 @@
 		if (!chapter || chapters.length <= 1) return;
 		deletingChapter = true;
 		try {
-			await workspaceApi.deleteChapter(params.graphId, params.chapterId);
+			await workspaceApi.chapters.delete(params.graphId, params.chapterId);
 			deleteDialogOpen = false;
 			await goto(resolve(`/stories/${params.graphId}`));
 		} catch (error) {

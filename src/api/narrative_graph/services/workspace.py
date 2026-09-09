@@ -446,23 +446,21 @@ class WorkspaceService:
         for membership in memberships:
             if membership["node_type"] in ids_by_type:
                 ids_by_type[membership["node_type"]].add(str(membership["node_id"]))
-        entities = result_rows(self.client.query(
-            "SELECT id, name, description FROM entity WHERE graph_id = {graph_id:UUID} AND status != 'deleted'",
-            parameters={"graph_id": graph_id},
-        ))
-        events = result_rows(self.client.query(
-            "SELECT id, name, description FROM event WHERE graph_id = {graph_id:UUID} AND status != 'deleted'",
-            parameters={"graph_id": graph_id},
-        ))
-        contexts = result_rows(self.client.query(
-            "SELECT id, type, description FROM context WHERE graph_id = {graph_id:UUID}",
-            parameters={"graph_id": graph_id},
-        ))
-        knowledge = result_rows(self.client.query(
-            "SELECT id, element_type, description FROM knowledge_element "
-            "WHERE graph_id = {graph_id:UUID} AND status != 'invalidated'",
-            parameters={"graph_id": graph_id},
-        ))
+        unified_query = """
+        SELECT 'entity' AS _node_type, id, name, description FROM entity WHERE graph_id = {graph_id:UUID} AND status != 'deleted'
+        UNION ALL
+        SELECT 'event' AS _node_type, id, name, description FROM event WHERE graph_id = {graph_id:UUID} AND status != 'deleted'
+        UNION ALL
+        SELECT 'context' AS _node_type, id, type AS name, description FROM context WHERE graph_id = {graph_id:UUID}
+        UNION ALL
+        SELECT 'knowledge_element' AS _node_type, id, element_type AS name, description FROM knowledge_element WHERE graph_id = {graph_id:UUID} AND status != 'invalidated'
+        """
+        all_nodes = result_rows(self.client.query(unified_query, parameters={"graph_id": graph_id}))
+        
+        entities = [{"id": row["id"], "name": row["name"], "description": row["description"]} for row in all_nodes if row["_node_type"] == "entity"]
+        events = [{"id": row["id"], "name": row["name"], "description": row["description"]} for row in all_nodes if row["_node_type"] == "event"]
+        contexts = [{"id": row["id"], "type": row["name"], "description": row["description"]} for row in all_nodes if row["_node_type"] == "context"]
+        knowledge = [{"id": row["id"], "element_type": row["name"], "description": row["description"]} for row in all_nodes if row["_node_type"] == "knowledge_element"]
         labels = {
             **{str(item["id"]): str(item["name"]) for item in entities},
             **{str(item["id"]): str(item["name"]) for item in events},
