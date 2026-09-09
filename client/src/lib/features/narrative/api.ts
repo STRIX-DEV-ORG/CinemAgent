@@ -25,11 +25,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 		if (cached && cached.expiresAt > Date.now()) return cached.value as Promise<T>;
 	}
 	const value = (async () => {
-	const response = await fetch(path, init);
-	if (!response.ok)
-		throw new Error((await response.text()) || `Request failed with status ${response.status}`);
-	if (response.status === 204) return undefined as T;
-	return response.json() as Promise<T>;
+		const response = await fetch(path, init);
+		if (!response.ok)
+			throw new Error((await response.text()) || `Request failed with status ${response.status}`);
+		if (response.status === 204) return undefined as T;
+		return response.json() as Promise<T>;
 	})();
 	if (method === 'GET') getRequests.set(path, { expiresAt: Date.now() + 5_000, value });
 	else getRequests.clear();
@@ -102,6 +102,18 @@ export const narrativeApi = {
 		const payload =
 			kind === 'entity'
 				? {
+					id,
+					name: String(values.name),
+					type: String(values.type),
+					status: String(values.status ?? 'active'),
+					description: String(values.description ?? ''),
+					content: String(values.content ?? ''),
+					confidence: Number(values.confidence ?? 1),
+					aliases: values.aliases ?? [],
+					metadata
+				}
+				: kind === 'event'
+					? {
 						id,
 						name: String(values.name),
 						type: String(values.type),
@@ -109,42 +121,30 @@ export const narrativeApi = {
 						description: String(values.description ?? ''),
 						content: String(values.content ?? ''),
 						confidence: Number(values.confidence ?? 1),
-						aliases: values.aliases ?? [],
 						metadata
 					}
-				: kind === 'event'
-					? {
+					: kind === 'context'
+						? {
 							id,
 							name: String(values.name),
 							type: String(values.type),
-							status: String(values.status ?? 'active'),
 							description: String(values.description ?? ''),
 							content: String(values.content ?? ''),
+							holder_entity_id: values.holder_entity_id || null,
 							confidence: Number(values.confidence ?? 1),
 							metadata
 						}
-					: kind === 'context'
-						? {
-								id,
-								name: String(values.name),
-								type: String(values.type),
-								description: String(values.description ?? ''),
-								content: String(values.content ?? ''),
-								holder_entity_id: values.holder_entity_id || null,
-								confidence: Number(values.confidence ?? 1),
-								metadata
-							}
 						: {
 							id,
 							element_type: String(values.element_type),
 							name: String(values.name),
 							description: String(values.description ?? ''),
 							content: String(values.content ?? ''),
-								origin: String(values.origin ?? 'writer'),
-								status: String(values.status ?? 'active'),
-								confidence: Number(values.confidence ?? 1),
-								metadata
-							};
+							origin: String(values.origin ?? 'writer'),
+							status: String(values.status ?? 'active'),
+							confidence: Number(values.confidence ?? 1),
+							metadata
+						};
 		const operationType = kind === 'assumption' ? 'create_knowledge_element' : `create_${kind}`;
 		return request<OperationBatch>(`/api/graphs/${graphId}/operations`, {
 			method: 'POST',
@@ -363,112 +363,122 @@ export const narrativeApi = {
 
 const workspacePath = (graphId: string, path = '') => `/api/workspace/${graphId}${path}`;
 export const workspaceApi = {
-	startAgentRun: (
-		graphId: string,
-		runRequest: {
-			agent_group: AgentGroup;
-			chapter_id?: string;
-			scope?: 'chapter' | 'story';
-			instruction?: string;
-		}
-	) =>
-		request<AgentRun>(workspacePath(graphId, '/agent-runs'), {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify(runRequest)
-		}),
-	getAgentRun: (graphId: string, runId: string) =>
-		request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}`)),
-	cancelAgentRun: (graphId: string, runId: string) =>
-		request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}:cancel`), { method: 'POST' }),
-	retryAgentRun: (graphId: string, runId: string) =>
-		request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}:retry`), { method: 'POST' }),
-	listAgentRuns: (graphId: string, chapterId?: string) =>
-		request<AgentRun[]>(
-			workspacePath(graphId, `/agent-runs${chapterId ? `?chapter_id=${chapterId}` : ''}`)
-		),
-	reviewAgentRun: (graphId: string, runId: string, accepted_text_ids: string[]) =>
-		request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}/review`), {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ accepted_text_ids })
-		}),
-	saveStoryboards: (graphId: string, runId: string, selected_scene_ids: string[]) =>
-		request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}/storyboards`), {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ selected_scene_ids })
-		}),
-	listChapters: (graphId: string) => request<StoryChapter[]>(workspacePath(graphId, '/chapters')),
-	getChapter: (graphId: string, chapterId: string) =>
-		request<StoryChapter>(workspacePath(graphId, `/chapters/${chapterId}`)),
-	createChapter: (graphId: string, title: string) =>
-		request<StoryChapter>(workspacePath(graphId, '/chapters'), {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ title })
-		}),
-	deleteChapter: (graphId: string, chapterId: string) =>
-		request<void>(workspacePath(graphId, `/chapters/${chapterId}`), { method: 'DELETE' }),
-	updateChapter: (
-		graphId: string,
-		chapterId: string,
-		update: { title?: string; sequence?: number }
-	) =>
-		request<StoryChapter>(workspacePath(graphId, `/chapters/${chapterId}`), {
-			method: 'PATCH',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify(update)
-		}),
-	reorderChapters: (graphId: string, chapterIds: string[]) =>
-		request<StoryChapter[]>(workspacePath(graphId, '/chapters/order'), {
-			method: 'PUT',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ chapter_ids: chapterIds })
-		}),
-	saveDocument: (
-		graphId: string,
-		chapterId: string,
-		document: TipTapDocument,
-		plain_text: string,
-		revision: number
-	) =>
-		request<StoryChapter>(workspacePath(graphId, `/chapters/${chapterId}/document`), {
-			method: 'PUT',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ document, plain_text, revision })
-		}),
-	startAnalysis: (graphId: string, chapterId: string) =>
-		request<AnalysisRun>(workspacePath(graphId, `/chapters/${chapterId}/analysis-runs`), {
-			method: 'POST'
-		}),
-	suggestText: (graphId: string, chapterId: string) =>
-		request<TextProposal[]>(workspacePath(graphId, `/chapters/${chapterId}/text-proposals`), {
-			method: 'POST'
-		}),
-	getProposals: (graphId: string, chapterId: string, runId: string) =>
-		request<AnalysisProposal[]>(
-			workspacePath(graphId, `/chapters/${chapterId}/analysis-runs/${runId}/proposals`)
-		),
-	applyProposals: (graphId: string, chapterId: string, runId: string, accepted_ids: string[]) =>
-		request<OperationBatch>(
-			workspacePath(graphId, `/chapters/${chapterId}/analysis-runs/${runId}:apply`),
-			{
-				method: 'POST',
-				headers: { 'content-type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-				body: JSON.stringify({ accepted_ids })
+	agents: {
+		startRun: (
+			graphId: string,
+			runRequest: {
+				agent_group: AgentGroup;
+				chapter_id?: string;
+				scope?: 'chapter' | 'story';
+				instruction?: string;
 			}
-		),
-	backfillSemanticIndex: (graphId: string) =>
-		request<{ status: string; message: string }>(workspacePath(graphId, '/semantic-index:backfill'), { method: 'POST' }),
-	storyHealth: (graphId: string) => request<StoryHealth>(workspacePath(graphId, '/intelligence/story-health')),
-	characterPresence: (graphId: string) => request<CharacterPresence[]>(workspacePath(graphId, '/intelligence/character-presence')),
-	relationTimeline: (graphId: string) => request<RelationTimelineItem[]>(workspacePath(graphId, '/intelligence/relation-timeline')),
-	intelligenceMetrics: (graphId: string) => request<IntelligenceMetrics>(workspacePath(graphId, '/intelligence/metrics')),
-	intelligence: (graphId: string) => request<{ health: StoryHealth; presence: CharacterPresence[]; relation_timeline: RelationTimelineItem[]; metrics: IntelligenceMetrics; events: NarrativeHistoryEvent[] }>(workspacePath(graphId, '/intelligence')),
-	events: (graphId: string) => request<NarrativeHistoryEvent[]>(workspacePath(graphId, '/events?limit=20')),
-	semanticSearch: (graphId: string, query: string) =>
-		request<Array<{ source_type: string; source_id: string; chapter_id: string | null; content: string; metadata: Record<string, unknown>; distance: number; destination?: { kind: 'chapter' | 'node'; chapter_id: string | null; node_id?: string; node_type?: string } }>>(
-			workspacePath(graphId, `/semantic-search?query=${encodeURIComponent(query)}`)
-		)
+		) =>
+			request<AgentRun>(workspacePath(graphId, '/agent-runs'), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(runRequest)
+			}),
+		getRun: (graphId: string, runId: string) =>
+			request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}`)),
+		cancelRun: (graphId: string, runId: string) =>
+			request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}:cancel`), { method: 'POST' }),
+		retryRun: (graphId: string, runId: string) =>
+			request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}:retry`), { method: 'POST' }),
+		listRuns: (graphId: string, chapterId?: string) =>
+			request<AgentRun[]>(
+				workspacePath(graphId, `/agent-runs${chapterId ? `?chapter_id=${chapterId}` : ''}`)
+			),
+		reviewRun: (graphId: string, runId: string, accepted_text_ids: string[]) =>
+			request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}/review`), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ accepted_text_ids })
+			}),
+		saveStoryboards: (graphId: string, runId: string, selected_scene_ids: string[]) =>
+			request<AgentRun>(workspacePath(graphId, `/agent-runs/${runId}/storyboards`), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ selected_scene_ids })
+			})
+	},
+	chapters: {
+		list: (graphId: string) => request<StoryChapter[]>(workspacePath(graphId, '/chapters')),
+		get: (graphId: string, chapterId: string) =>
+			request<StoryChapter>(workspacePath(graphId, `/chapters/${chapterId}`)),
+		create: (graphId: string, title: string) =>
+			request<StoryChapter>(workspacePath(graphId, '/chapters'), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ title })
+			}),
+		delete: (graphId: string, chapterId: string) =>
+			request<void>(workspacePath(graphId, `/chapters/${chapterId}`), { method: 'DELETE' }),
+		update: (
+			graphId: string,
+			chapterId: string,
+			update: { title?: string; sequence?: number }
+		) =>
+			request<StoryChapter>(workspacePath(graphId, `/chapters/${chapterId}`), {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(update)
+			}),
+		reorder: (graphId: string, chapterIds: string[]) =>
+			request<StoryChapter[]>(workspacePath(graphId, '/chapters/order'), {
+				method: 'PUT',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ chapter_ids: chapterIds })
+			}),
+		saveDocument: (
+			graphId: string,
+			chapterId: string,
+			document: TipTapDocument,
+			plain_text: string,
+			revision: number
+		) =>
+			request<StoryChapter>(workspacePath(graphId, `/chapters/${chapterId}/document`), {
+				method: 'PUT',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ document, plain_text, revision })
+			})
+	},
+	analysis: {
+		start: (graphId: string, chapterId: string) =>
+			request<AnalysisRun>(workspacePath(graphId, `/chapters/${chapterId}/analysis-runs`), {
+				method: 'POST'
+			}),
+		suggestText: (graphId: string, chapterId: string) =>
+			request<TextProposal[]>(workspacePath(graphId, `/chapters/${chapterId}/text-proposals`), {
+				method: 'POST'
+			}),
+		getProposals: (graphId: string, chapterId: string, runId: string) =>
+			request<AnalysisProposal[]>(
+				workspacePath(graphId, `/chapters/${chapterId}/analysis-runs/${runId}/proposals`)
+			),
+		applyProposals: (graphId: string, chapterId: string, runId: string, accepted_ids: string[]) =>
+			request<OperationBatch>(
+				workspacePath(graphId, `/chapters/${chapterId}/analysis-runs/${runId}:apply`),
+				{
+					method: 'POST',
+					headers: { 'content-type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+					body: JSON.stringify({ accepted_ids })
+				}
+			)
+	},
+	intelligence: {
+		storyHealth: (graphId: string) => request<StoryHealth>(workspacePath(graphId, '/intelligence/story-health')),
+		characterPresence: (graphId: string) => request<CharacterPresence[]>(workspacePath(graphId, '/intelligence/character-presence')),
+		relationTimeline: (graphId: string) => request<RelationTimelineItem[]>(workspacePath(graphId, '/intelligence/relation-timeline')),
+		metrics: (graphId: string) => request<IntelligenceMetrics>(workspacePath(graphId, '/intelligence/metrics')),
+		intelligence: (graphId: string) => request<{ health: StoryHealth; presence: CharacterPresence[]; relation_timeline: RelationTimelineItem[]; metrics: IntelligenceMetrics; events: NarrativeHistoryEvent[] }>(workspacePath(graphId, '/intelligence')),
+		events: (graphId: string) => request<NarrativeHistoryEvent[]>(workspacePath(graphId, '/events?limit=20'))
+	},
+	search: {
+		backfillSemanticIndex: (graphId: string) =>
+			request<{ status: string; message: string }>(workspacePath(graphId, '/semantic-index:backfill'), { method: 'POST' }),
+		semanticSearch: (graphId: string, query: string) =>
+			request<Array<{ source_type: string; source_id: string; chapter_id: string | null; content: string; metadata: Record<string, unknown>; distance: number; destination?: { kind: 'chapter' | 'node'; chapter_id: string | null; node_id?: string; node_type?: string } }>>(
+				workspacePath(graphId, `/semantic-search?query=${encodeURIComponent(query)}`)
+			)
+	}
 };
