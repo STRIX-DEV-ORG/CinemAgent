@@ -107,6 +107,16 @@ python -m src.narrative_projector
 
 Deploy this worker separately from the API in Cloud Run using `Dockerfile.projector`; it uses the same ClickHouse checkpoint table and is safe to restart. Deleted stories are hidden immediately, restorable for 30 days through `POST /{graph_id}:restore`, and then purged by the worker.
 
+Writer agent runs use a separate durable worker too. Deploy `Dockerfile.agent-worker` or run it locally with:
+
+```bash
+python -m src.narrative_agent_worker
+```
+
+The API only queues agent runs by default. Set `NARRATIVE_AGENT_WORKER_IN_PROCESS=true` for a local single-process setup; production should keep it false and run the worker separately.
+
+Storyboard and narration use dedicated Gemini media models (`GEMINI_IMAGE_MODEL=gemini-3.1-flash-image` and `GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts`). They fail visibly when Gemini is unavailable or out of credits, rather than storing a placeholder image or synthetic tone. Set `GEMINI_MEDIA_ALLOW_FALLBACK=true` only for an intentional offline demo.
+
 Before enabling `NARRATIVE_READ_PROJECTIONS=true`, an administrator should bootstrap existing stories and compare projected reads with the legacy tables. The protected endpoints `POST /{graph_id}/diagnostics/projection:bootstrap`, `POST /{graph_id}/diagnostics/projection:replay`, and `GET /{graph_id}/diagnostics/projection` support that migration. `GET /diagnostics/clickhouse` exposes developer-only projection, storage, and query-telemetry health.
 
 ---

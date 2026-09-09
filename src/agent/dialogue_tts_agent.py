@@ -85,15 +85,16 @@ def _speaker_from_quote_context(before: str, after: str, known_names: List[str],
 
 
 def _extract_attributed_dialogues(chapter_text: str, character_hints: Dict[str, str], emotion_hint: str | None) -> List[Dict[str, Any]]:
-    """Extract screenplay and quoted dialogue strictly from the [character] (emotion) : "dialogue" format."""
+    """Extract explicit screenplay dialogue, including ``[Character]: line``."""
     dialogues: List[Dict[str, Any]] = []
     assigned_voices: Dict[str, str] = {}
     
-    # regex for `[character] (emotion) : "dialogue"`
-    pattern = r'(?m)^\s*\[\s*(.+?)\s*\]\s*\(\s*(.+?)\s*\)\s*:\s*["“](.+?)["”]\s*$'
+    pattern = r'(?m)^\s*\[\s*(?P<speaker>[^\]]+?)\s*\]\s*(?:\(\s*(?P<emotion>[^\)]*?)\s*\))?\s*:\s*["“]?(?P<line>.*?)["”]?\s*$'
     
     for index, match in enumerate(re.finditer(pattern, chapter_text), start=1):
-        speaker, emotion, line = match.group(1).strip(), match.group(2).strip(), match.group(3).strip()
+        speaker = match.group("speaker").strip()
+        emotion = (match.group("emotion") or emotion_hint or "natural").strip()
+        line = match.group("line").strip().strip('"“”')
         if line:
             dialogues.append({
                 "dialogueId": f"script_{index}", "speaker": speaker, "line": line,
@@ -211,8 +212,11 @@ class DialogueTTSExecutor:
                     ad["emotion"] = llm_emotions[spk]
             raw_dialogues = attributed_dialogues
 
-        # Removed passive narration fallback logic to ensure only text with
-        # the [character] (emotion) : "dialogue" structure produces audio.
+        # Narration is a first-class track. It is synthesized alongside
+        # explicit character lines rather than being silently discarded.
+        narration = _extract_passive_narration(request.chapter_text, request.emotion_hint)
+        if narration:
+            raw_dialogues = [*raw_dialogues, *narration]
 
         # Synthesize audio for each dialogue line
         dialogue_models: List[DialogueLine] = []

@@ -7,6 +7,7 @@ import wave
 import math
 import struct
 import re
+import binascii
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from PIL import Image, ImageDraw, ImageFont
@@ -14,6 +15,27 @@ from PIL import Image, ImageDraw, ImageFont
 from src.config import settings
 
 logger = structlog.get_logger(__name__)
+
+
+def _binary_data(value: Any) -> bytes:
+    """Accept SDK bytes or the base64 payload exposed by Interactions."""
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        try:
+            return base64.b64decode(value)
+        except (ValueError, binascii.Error) as error:
+            raise ValueError("Gemini returned an invalid base64 media payload") from error
+    raise ValueError("Gemini did not return binary media data")
+
+
+def _write_pcm_wav(path: str, pcm: bytes, rate: int = 24_000) -> None:
+    """Gemini TTS returns raw 16-bit PCM, not a ready-to-play WAV container."""
+    with wave.open(path, "wb") as output:
+        output.setnchannels(1)
+        output.setsampwidth(2)
+        output.setframerate(rate)
+        output.writeframes(pcm)
 
 
 def _create_mock_storyboard_image(
@@ -274,35 +296,25 @@ class ScenographerTool:
                 from google import genai
                 from google.genai import types
                 client = genai.Client(api_key=settings.GEMINI_API_KEY)
-                
-                # Attempt image generation using Gemini 3
-                try:
-                    result = client.models.generate_content(
-                        model='gemini-3-pro-image',
-                        contents=image_prompt,
-                        config=types.GenerateContentConfig(
-                            response_modalities=["IMAGE"],
-                            image_config=types.ImageConfig(
-                                aspect_ratio="16:9"
-                            )
-                        )
-                    )
-                    if result.candidates and result.candidates[0].content.parts:
-                        for part in result.candidates[0].content.parts:
-                            if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
-                                with open(output_file, 'wb') as f:
-                                    f.write(part.inline_data.data)
-                                break
-                        return {
-                            "scene_id": scene_id,
-                            "image_path": output_file,
-                            "image_url": f"/api/v1/pipeline/media/{filename}",
-                            "source": "imagen-3.0-generate-002"
-                        }
-                except Exception as img_err:
-                    logger.warn("Imagen generation failed or not permitted on key, using high-res visual storyboard generator", error=str(img_err))
-            except Exception as e:
-                logger.warn("Google GenAI client initialization failed", error=str(e))
+            except Exception as error:
+                raise RuntimeError(f"Gemini image client could not start: {error}") from error
+            try:
+                result = client.models.generate_content(
+                    model=settings.GEMINI_IMAGE_MODEL, contents=image_prompt,
+                    config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"], image_config=types.ImageConfig(aspect_ratio="16:9")),
+                )
+                for part in getattr(getattr(result.candidates[0], "content", None), "parts", []) or []:
+                    if getattr(getattr(part, "inline_data", None), "data", None):
+                        with open(output_file, "wb") as output:
+                            output.write(_binary_data(part.inline_data.data))
+                        return {"scene_id": scene_id, "image_path": output_file,
+                                "image_url": f"/api/v1/pipeline/media/{filename}", "source": settings.GEMINI_IMAGE_MODEL}
+                raise ValueError("Gemini returned no image bytes")
+            except Exception as error:
+                raise RuntimeError(f"Gemini image generation failed: {error}") from error
+
+        if not settings.GEMINI_MEDIA_ALLOW_FALLBACK:
+            raise RuntimeError("Gemini image generation requires GEMINI_API_KEY; set GEMINI_MEDIA_ALLOW_FALLBACK=true only for offline demos")
 
         # High-definition visual fallback
         _create_mock_storyboard_image(
@@ -360,39 +372,33 @@ class DialogueTTSTool:
         words = len(line.split())
         estimated_duration = max(1.5, round(words / 2.8, 2))
 
-        # Check if Gemini Flash Audio TTS can be used directly
+        gemini_failure: Exception | None = None
+        # Use Gemini first.  A provider quota/outage must not leave a chapter
+        # without any playable narration, so real local/neural voice engines
+        # are attempted afterwards.
         if settings.GEMINI_API_KEY:
             try:
                 from google import genai
                 client = genai.Client(api_key=settings.GEMINI_API_KEY)
-                
-                # Try generating content with audio modality if supported
+            except Exception as error:
+                gemini_failure = error
+            else:
                 try:
-                    response = client.models.generate_content(
-                        model=settings.GEMINI_MODEL_VERSION,
-                        contents=f"Perform this character line as voice actor for {speaker} ({emotion}): {line}",
-                        config={
-                            'response_modalities': ['AUDIO']
-                        }
+                    response = client.interactions.create(
+                        model=settings.GEMINI_TTS_MODEL,
+                        input=f"Perform exactly this line as {speaker}. Direction: {emotion}.\n\n{line}",
+                        response_format={"type": "audio"}, generation_config={"speech_config": [{"voice": voice_name}]},
                     )
-                    # If audio parts are returned
-                    if response.candidates and response.candidates[0].content.parts:
-                        for part in response.candidates[0].content.parts:
-                            if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
-                                with open(output_file, 'wb') as f:
-                                    f.write(part.inline_data.data)
-                                return {
-                                    "dialogue_id": dialogue_id,
-                                    "speaker": speaker,
-                                    "audio_path": output_file,
-                                    "audio_url": f"/api/v1/pipeline/media/{filename}",
-                                    "duration_seconds": estimated_duration,
-                                    "source": "gemini_flash_tts"
-                                }
-                except Exception as tts_err:
-                    logger.warn("Flash TTS direct audio modality error, using acoustic voice synthesis fallback", error=str(tts_err))
-            except Exception as e:
-                logger.warn("Google GenAI client unavailable", error=str(e))
+                    data = getattr(getattr(response, "output_audio", None), "data", None)
+                    if not data:
+                        raise ValueError("Gemini TTS returned no audio")
+                    _write_pcm_wav(output_file, _binary_data(data))
+                    return {"dialogue_id": dialogue_id, "speaker": speaker, "audio_path": output_file,
+                            "audio_url": f"/api/v1/pipeline/media/{filename}", "duration_seconds": estimated_duration,
+                            "source": settings.GEMINI_TTS_MODEL}
+                except Exception as error:
+                    gemini_failure = error
+            logger.warning("Gemini TTS unavailable; generating a real fallback voice", error=str(gemini_failure))
 
         # Prefer a real neural voice for every writer-visible artifact.
         if await _synthesize_edge_speech(neural_output_file, line, voice_name):
@@ -416,7 +422,11 @@ class DialogueTTSTool:
                 "source": "windows_sapi_tts"
             }
 
-        # Last-resort acoustic signal for non-Windows/offline deployments.
+        if not settings.GEMINI_MEDIA_ALLOW_FALLBACK:
+            detail = f" (Gemini error: {gemini_failure})" if gemini_failure else ""
+            raise RuntimeError(f"No real TTS engine is available for this worker{detail}")
+
+        # Explicit opt-in only: never show a tone as though it were narration.
         base_freq = 150.0 if gender.upper() == "MALE" else (240.0 if gender.upper() == "FEMALE" else 190.0)
         _create_mock_wav_audio(
             output_path=output_file,

@@ -1,5 +1,6 @@
 import os
 import uuid
+from uuid import UUID
 import uvicorn
 import asyncio
 import structlog
@@ -14,6 +15,7 @@ from pydantic import BaseModel
 from src.config import settings
 from src.db.clickhouse_client import init_db, get_clickhouse_client
 from src.agent.orchestrator import AgentOrchestrator, task_progress_store
+from src.api.narrative_graph.models import AgentRunCreate
 from src.agent.scenographer_agent import scenographer_executor
 from src.agent.dialogue_tts_agent import dialogue_tts_executor
 from src.agent.searcher_agent import searcher_investigator_executor
@@ -127,32 +129,21 @@ async def generate_screenplay_pipeline(
     request: ScreenplayPipelineRequest,
     background_tasks: BackgroundTasks
 ):
-    """
-    Starts the full end-to-end multi-agent pipeline asynchronously:
-    - Text-to-Graph Analysis (0 - 30%)
-    - Graph-to-Text Multi-Act Narrative & Scene Generation (30 - 80%)
-    - Screenplay PDF Compilation: PyPDF + ReportLab (80 - 100%)
-    """
-    task_id = f"task_{uuid.uuid4().hex[:12]}"
-    
-    initial_status = PipelineProgressStatus(
-        task_id=task_id,
-        status_value=0,
-        status_message="Screenplay generation task queued...",
-        current_agent="Orchestrator",
-        stage="queued"
-    )
-    task_progress_store[task_id] = initial_status
-
-    async def run_pipeline_job():
-        try:
-            orch = get_orchestrator()
-            await orch.execute_screenplay_pipeline(task_id=task_id, request=request)
-        except Exception as e:
-            logger.error("Background screenplay pipeline task failed", task_id=task_id, error=str(e))
-
-    background_tasks.add_task(run_pipeline_job)
-    return initial_status
+    """Compatibility entrypoint backed by the durable contextual writer run."""
+    if not request.graph_id:
+        raise HTTPException(status_code=422, detail="graph_id is required. Create or select a story, then run production against that story.")
+    service = NarrativeGraphService()
+    run = service.agents.start(request.graph_id, AgentRunCreate(
+        agent_group="produce", chapter_id=request.chapter_id,
+        scope="chapter" if request.chapter_id else "story",
+        instruction=request.story_prompt or request.raw_text or "",
+        options={"enable_images": request.enable_images, "enable_tts": request.enable_tts,
+                 "enable_pdf": request.enable_pdf, "genre": request.genre, "tone": request.tone},
+    ))
+    if settings.NARRATIVE_AGENT_WORKER_IN_PROCESS:
+        background_tasks.add_task(service.agents.execute, request.graph_id, run.id)
+    return PipelineProgressStatus(task_id=str(run.id), status_value=run.progress, status_message=run.message,
+                                  current_agent="WriterOrchestrator", stage="queued")
 
 
 # -----------------------------------------------------------------------------
@@ -224,39 +215,36 @@ async def run_standalone_investigator(request: InvestigatorRequest):
 # 5. Status, Streaming, Media, and PDF Endpoints
 # -----------------------------------------------------------------------------
 
+def _durable_pipeline_status(graph_id: UUID, task_id: str) -> PipelineProgressStatus:
+    run = NarrativeGraphService().agents.get(graph_id, UUID(task_id))
+    return PipelineProgressStatus(task_id=task_id, status_value=run.progress, status_message=run.message,
+        current_agent=run.stages[-1].name if run.stages else "WriterOrchestrator",
+        stage=run.stages[-1].status if run.stages else run.status,
+        is_completed=run.status in {"completed", "reviewed"}, is_error=run.status in {"failed", "cancelled"},
+        error_message=run.error, artifacts=run.result)
+
+
 @app.get("/api/v1/pipeline/status/{task_id}", response_model=PipelineProgressStatus)
-def get_pipeline_status(task_id: str):
+def get_pipeline_status(task_id: str, graph_id: UUID):
     """
     Polls the real-time progress status (0-100), active agent, stage, and artifacts.
     """
-    status = task_progress_store.get(task_id)
-    if not status:
-        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
-    return status
+    return _durable_pipeline_status(graph_id, task_id)
 
 
 @app.get("/api/v1/pipeline/stream/{task_id}")
-async def stream_pipeline_status(task_id: str):
+async def stream_pipeline_status(task_id: str, graph_id: UUID):
     """
     Server-Sent Events (SSE) stream for real-time progress updates (0 to 100%).
     """
-    if task_id not in task_progress_store:
-        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
-
     async def event_generator():
-        last_val = -1
-        last_msg = ""
+        last = None
         while True:
-            status = task_progress_store.get(task_id)
-            if not status:
-                break
-
-            if status.status_value != last_val or status.status_message != last_msg:
-                last_val = status.status_value
-                last_msg = status.status_message
+            status = _durable_pipeline_status(graph_id, task_id)
+            if status.model_dump_json() != last:
+                last = status.model_dump_json()
                 data_json = status.model_dump_json()
                 yield f"data: {data_json}\n\n"
-
             if status.is_completed or status.is_error:
                 break
 

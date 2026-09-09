@@ -1,5 +1,6 @@
 import time
 from typing import Any, Dict, List, Optional
+from uuid import UUID
 from pydantic import BaseModel, Field
 
 
@@ -62,6 +63,8 @@ class PipelineProgressStatus(BaseModel):
 
 
 class ScreenplayPipelineRequest(BaseModel):
+    graph_id: Optional[UUID] = Field(default=None, description="Required target story UUID for the durable pipeline.")
+    chapter_id: Optional[UUID] = Field(default=None, description="Optional chapter UUID; omit for story production.")
     raw_text: Optional[str] = Field(
         default=None, 
         description="Raw narrative or screenplay text to ingest via Text-to-Graph pipeline."

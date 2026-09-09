@@ -39,16 +39,34 @@ export type TextProposal = {
 };
 export type AgentGroup =
 	'analysis' | 'draft' | 'review' | 'research' | 'visuals' | 'voice' | 'produce';
+export type DialogueTrack = {
+	speaker: string;
+	line: string;
+	emotion?: string | null;
+	audio_url?: string | null;
+	audio_path?: string | null;
+};
 export type AgentRun = {
 	id: string;
 	graph_id: string;
 	chapter_id: string | null;
 	agent_group: AgentGroup;
 	scope: 'chapter' | 'story';
-	status: 'queued' | 'running' | 'completed' | 'failed' | 'reviewed';
+	status: 'queued' | 'running' | 'completed' | 'failed' | 'reviewed' | 'cancelled';
 	progress: number;
 	message: string;
 	error: string | null;
+	attempt?: number;
+	source_revision?: number | null;
+	stale?: boolean;
+	stages?: Array<{
+		name: string;
+		status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+		progress: number;
+		attempt: number;
+		message: string;
+		error?: string | null;
+	}>;
 	result: {
 		stages?: string[];
 		text_patches?: TextProposal[];
@@ -96,11 +114,9 @@ export type AgentRun = {
 				excerpt: string;
 				image_url?: string | null;
 			}>;
-			dialogues?: Array<{ speaker: string; line: string; audio_url?: string | null }>;
+			dialogues?: DialogueTrack[];
 		};
-		dialogues?: {
-			dialogues?: Array<{ speaker: string; line: string; audio_url?: string | null }>;
-		};
+		dialogues?: { dialogues?: DialogueTrack[] } | DialogueTrack[];
 		pdf_path?: string | null;
 		[key: string]: unknown;
 	};

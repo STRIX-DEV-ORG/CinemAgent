@@ -125,6 +125,20 @@ class AgentRunResponse(BaseModel):
     message: str
     error: str | None = None
     result: dict[str, Any] = Field(default_factory=dict)
+    attempt: int = 1
+    source_revision: int | None = None
+    stale: bool = False
+    stages: list["AgentRunStage"] = Field(default_factory=list)
+
+
+class AgentRunStage(BaseModel):
+    name: str
+    status: Literal["queued", "running", "completed", "failed", "cancelled"]
+    progress: int = Field(ge=0, le=100)
+    attempt: int = 1
+    message: str = ""
+    error: str | None = None
+    output: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentRunReview(BaseModel):

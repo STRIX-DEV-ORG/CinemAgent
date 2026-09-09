@@ -14,6 +14,7 @@ from .models import (
     TextProposal,
     AgentRunCreate,
     AgentRunResponse,
+    AgentRunStage,
     AgentRunReview,
 )
 from .routers.graphs import router as graphs_router
@@ -46,6 +47,7 @@ __all__ = [
     "TextProposal",
     "AgentRunCreate",
     "AgentRunResponse",
+    "AgentRunStage",
     "AgentRunReview",
     "get_service",
     "require_api_key",
