@@ -96,7 +96,7 @@ The API queues a writer-agent run, while a dedicated worker claims it with a dur
 
 ---
 
-## ⚠️ Instructions for Judges: Run locally
+## ⚠️ Instructions for Run locally
 
 ### Prerequisites
 - Python 3.11 or newer
