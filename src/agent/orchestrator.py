@@ -62,7 +62,7 @@ class AgentOrchestrator:
         self.retriever = Retriever()
         self.pdf_generator = ScreenplayPDFGenerator()
         
-        self.has_llm = bool(settings.GEMINI_API_KEY or getattr(settings, "OPENAI_API_KEY", ""))
+        self.has_llm = bool(settings.GEMINI_API_KEY)
         if not self.has_llm:
             logger.warn("No API Keys configured for Gemini or OpenAI. The agent will run with simulated/mock agent responses.")
 

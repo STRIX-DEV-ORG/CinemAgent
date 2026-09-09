@@ -65,20 +65,18 @@ class AgentRunService:
         ))
         ids = {kind: {str(row["node_id"]) for row in memberships if row["node_type"] == kind}
                for kind in ("entity", "context", "knowledge_element")}
-        entities = result_rows(self.client.query(
-            "SELECT id, name, type, description, content, aliases FROM entity "
-            "WHERE graph_id = {graph_id:UUID} AND status != 'deleted'",
-            parameters={"graph_id": graph_id},
-        ))
-        contexts = result_rows(self.client.query(
-            "SELECT id, name, type, description, content FROM context WHERE graph_id = {graph_id:UUID}",
-            parameters={"graph_id": graph_id},
-        ))
-        details = result_rows(self.client.query(
-            "SELECT id, name, element_type, description, content FROM knowledge_element "
-            "WHERE graph_id = {graph_id:UUID} AND status != 'invalidated'",
-            parameters={"graph_id": graph_id},
-        ))
+        unified_query = """
+        SELECT 'entity' AS _node_type, id, name, type, description, content, aliases FROM entity WHERE graph_id = {graph_id:UUID} AND status != 'deleted'
+        UNION ALL
+        SELECT 'context' AS _node_type, id, name, type, description, content, '' AS aliases FROM context WHERE graph_id = {graph_id:UUID}
+        UNION ALL
+        SELECT 'knowledge_element' AS _node_type, id, name, element_type AS type, description, content, '' AS aliases FROM knowledge_element WHERE graph_id = {graph_id:UUID} AND status != 'invalidated'
+        """
+        all_nodes = result_rows(self.client.query(unified_query, parameters={"graph_id": graph_id}))
+        
+        entities = [{"id": row["id"], "name": row["name"], "type": row["type"], "description": row["description"], "content": row["content"], "aliases": row["aliases"]} for row in all_nodes if row["_node_type"] == "entity"]
+        contexts = [{"id": row["id"], "name": row["name"], "type": row["type"], "description": row["description"], "content": row["content"]} for row in all_nodes if row["_node_type"] == "context"]
+        details = [{"id": row["id"], "name": row["name"], "element_type": row["type"], "description": row["description"], "content": row["content"]} for row in all_nodes if row["_node_type"] == "knowledge_element"]
         def compact(row: dict[str, Any], fields: tuple[str, ...]) -> dict[str, str]:
             return {field: str(row.get(field) or "")[:500] for field in fields if row.get(field)}
         included_entities = [row for row in entities if str(row["id"]) in ids["entity"]]

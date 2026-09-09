@@ -44,7 +44,7 @@
 		try {
 			const [story, chapters, graph] = await Promise.all([
 				narrativeApi.getGraph(graphId),
-				workspaceApi.listChapters(graphId),
+				workspaceApi.chapters.list(graphId),
 				narrativeApi.querySubgraph(graphId, false)
 			]);
 			const chapterNodes = await Promise.all(
@@ -85,10 +85,10 @@
 				throw new Error('Choose a CinemAgent story export file.');
 			}
 			const graph = await narrativeApi.createGraph(snapshot.story.name);
-			const importedChapters = await workspaceApi.listChapters(graph.id);
+			const importedChapters = await workspaceApi.chapters.list(graph.id);
 			const first = snapshot.chapters[0];
-			await workspaceApi.updateChapter(graph.id, importedChapters[0].id, { title: first.title });
-			await workspaceApi.saveDocument(
+			await workspaceApi.chapters.update(graph.id, importedChapters[0].id, { title: first.title });
+			await workspaceApi.chapters.saveDocument(
 				graph.id,
 				importedChapters[0].id,
 				first.document,
@@ -96,8 +96,8 @@
 				importedChapters[0].revision + 1
 			);
 			for (const chapter of snapshot.chapters.slice(1)) {
-				const created = await workspaceApi.createChapter(graph.id, chapter.title);
-				await workspaceApi.saveDocument(
+				const created = await workspaceApi.chapters.create(graph.id, chapter.title);
+				await workspaceApi.chapters.saveDocument(
 					graph.id,
 					created.id,
 					chapter.document,
