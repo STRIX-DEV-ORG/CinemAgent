@@ -340,7 +340,7 @@
 				agentOutput = run;
 			}
 			agentOutput = run;
-			agentResultsOpen = group === 'review' || group === 'research' || group === 'voice';
+			agentResultsOpen = group === 'review' || group === 'research';
 			agentRuns = [run, ...agentRuns.filter((item) => item.id !== run.id)].slice(0, 12);
 			if (run.status === 'failed') throw new Error(run.error || 'The agent run failed.');
 			if (run.status === 'cancelled') throw new Error('The agent run was cancelled.');
@@ -1482,7 +1482,7 @@
 <Dialog.Root bind:open={agentResultsOpen}>
 	<Dialog.Content class="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
 		<Dialog.Header>
-			<Dialog.Title>{agentOutput?.agent_group === 'review' ? 'Continuity and graph feedback' : agentOutput?.agent_group === 'voice' ? 'Generated dialogue and narration' : 'Historical accuracy and lore research'}</Dialog.Title>
+			<Dialog.Title>{agentOutput?.agent_group === 'review' ? 'Continuity and graph feedback' : 'Historical accuracy and lore research'}</Dialog.Title>
 			<Dialog.Description>{agentOutput?.message ?? 'The agent result is ready to review.'}</Dialog.Description>
 		</Dialog.Header>
 		{#if agentOutput?.agent_group === 'review'}<div class="grid gap-3">
@@ -1494,12 +1494,6 @@
 				{#if agentOutput.result.graph_proposals?.length && proposalSource === 'review'}<p class="rounded-md bg-muted p-3 text-sm">
 					{agentOutput.result.graph_proposals.length} graph feedback proposal(s) are available in the graph panel. Select the facts you want, then use <strong>Apply selected</strong>.
 				</p>{/if}
-			</div>{:else if agentOutput?.agent_group === 'voice'}<div class="grid gap-3">
-				{#if generatedDialogueTracks.length}{#each generatedDialogueTracks as dialogue, index (`modal-${dialogue.speaker}-${index}`)}<article class="rounded-md border p-3">
-					<p class="font-medium">{dialogue.speaker}</p>
-					<p class="mt-1 text-sm text-muted-foreground">{dialogue.line}</p>
-					{#if dialogueAudioUrl(dialogue)}<audio class="mt-3 w-full" controls preload="metadata" src={dialogueAudioUrl(dialogue)}><track kind="captions" /></audio>{:else}<p class="mt-2 text-sm text-destructive">No playable audio file was returned for this line.</p>{/if}
-				</article>{/each}{:else}<p class="rounded-md border p-3 text-sm text-muted-foreground">No dialogue or narration tracks were returned. Ensure the chapter has prose or explicit speaker lines, then run audio generation again.</p>{/if}
 			</div>{:else if agentOutput?.result.report}<div class="grid gap-3">
 				<section class="rounded-md border bg-muted/30 p-3 text-sm">
 					<h3 class="font-semibold">What this research checked</h3>
