@@ -1,42 +1,33 @@
-# sv
+# CinemAgent client
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+The CinemAgent client is a SvelteKit + TypeScript workspace for writing and navigating stories as narrative graphs. It uses Tailwind CSS, shadcn-svelte, Tiptap, and Svelte Flow.
 
-## Creating a project
+For the product overview, architecture, and full API/worker setup, see the [project documentation](../documentation/README.md).
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Local development
 
-```sh
-# create a new project
-npx sv create my-app
+1. Ensure the FastAPI service is running on port `8080` and has access to ClickHouse.
+2. Create `.env` from `.env.example` and provide the server-side API configuration:
+
+   ```dotenv
+   FASTAPI_URL=http://localhost:8080
+   NARRATIVE_API_KEY=replace-with-the-backend-api-key
+   ```
+
+3. Install dependencies and start Vite:
+
+   ```powershell
+   pnpm install
+   pnpm dev
+   ```
+
+The application is normally available at [http://localhost:5173](http://localhost:5173). The browser calls same-origin `/api` routes; SvelteKit forwards those routes to FastAPI and keeps `NARRATIVE_API_KEY` on the server.
+
+## Checks
+
+```powershell
+pnpm check
+pnpm lint
+pnpm test
+pnpm build
 ```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-pnpm dlx sv@0.17.0 create --template minimal --types ts --add prettier eslint vitest="usages:unit,component" tailwindcss="plugins:none" sveltekit-adapter="adapter:node" --install pnpm client
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
