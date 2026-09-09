@@ -372,31 +372,33 @@ class DialogueTTSTool:
         words = len(line.split())
         estimated_duration = max(1.5, round(words / 2.8, 2))
 
-        # Check if Gemini Flash Audio TTS can be used directly
+        gemini_failure: Exception | None = None
+        # Use Gemini first.  A provider quota/outage must not leave a chapter
+        # without any playable narration, so real local/neural voice engines
+        # are attempted afterwards.
         if settings.GEMINI_API_KEY:
             try:
                 from google import genai
                 client = genai.Client(api_key=settings.GEMINI_API_KEY)
             except Exception as error:
-                raise RuntimeError(f"Gemini TTS client could not start: {error}") from error
-            try:
-                response = client.interactions.create(
-                    model=settings.GEMINI_TTS_MODEL,
-                    input=f"Perform exactly this line as {speaker}. Direction: {emotion}.\n\n{line}",
-                    response_format={"type": "audio"}, generation_config={"speech_config": [{"voice": voice_name}]},
-                )
-                data = getattr(getattr(response, "output_audio", None), "data", None)
-                if not data:
-                    raise ValueError("Gemini TTS returned no audio")
-                _write_pcm_wav(output_file, _binary_data(data))
-                return {"dialogue_id": dialogue_id, "speaker": speaker, "audio_path": output_file,
-                        "audio_url": f"/api/v1/pipeline/media/{filename}", "duration_seconds": estimated_duration,
-                        "source": settings.GEMINI_TTS_MODEL}
-            except Exception as error:
-                raise RuntimeError(f"Gemini TTS generation failed: {error}") from error
-
-        if not settings.GEMINI_MEDIA_ALLOW_FALLBACK:
-            raise RuntimeError("Gemini TTS requires GEMINI_API_KEY; set GEMINI_MEDIA_ALLOW_FALLBACK=true only for offline demos")
+                gemini_failure = error
+            else:
+                try:
+                    response = client.interactions.create(
+                        model=settings.GEMINI_TTS_MODEL,
+                        input=f"Perform exactly this line as {speaker}. Direction: {emotion}.\n\n{line}",
+                        response_format={"type": "audio"}, generation_config={"speech_config": [{"voice": voice_name}]},
+                    )
+                    data = getattr(getattr(response, "output_audio", None), "data", None)
+                    if not data:
+                        raise ValueError("Gemini TTS returned no audio")
+                    _write_pcm_wav(output_file, _binary_data(data))
+                    return {"dialogue_id": dialogue_id, "speaker": speaker, "audio_path": output_file,
+                            "audio_url": f"/api/v1/pipeline/media/{filename}", "duration_seconds": estimated_duration,
+                            "source": settings.GEMINI_TTS_MODEL}
+                except Exception as error:
+                    gemini_failure = error
+            logger.warning("Gemini TTS unavailable; generating a real fallback voice", error=str(gemini_failure))
 
         # Prefer a real neural voice for every writer-visible artifact.
         if await _synthesize_edge_speech(neural_output_file, line, voice_name):
@@ -420,7 +422,11 @@ class DialogueTTSTool:
                 "source": "windows_sapi_tts"
             }
 
-        # Last-resort acoustic signal for non-Windows/offline deployments.
+        if not settings.GEMINI_MEDIA_ALLOW_FALLBACK:
+            detail = f" (Gemini error: {gemini_failure})" if gemini_failure else ""
+            raise RuntimeError(f"No real TTS engine is available for this worker{detail}")
+
+        # Explicit opt-in only: never show a tone as though it were narration.
         base_freq = 150.0 if gender.upper() == "MALE" else (240.0 if gender.upper() == "FEMALE" else 190.0)
         _create_mock_wav_audio(
             output_path=output_file,

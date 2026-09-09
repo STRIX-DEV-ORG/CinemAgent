@@ -15,6 +15,7 @@
 		AnalysisProposal,
 		AgentGroup,
 		AgentRun,
+		DialogueTrack,
 		StoryChapter,
 		Subgraph,
 		TextProposal,
@@ -145,6 +146,13 @@
 			: generatedStoryboardScenes;
 	});
 	const currentStoryboardScene = $derived(generatedStoryboardScenes[storyboardIndex]);
+	const generatedDialogueTracks = $derived.by((): DialogueTrack[] => {
+		const mediaTracks = agentOutput?.result.media?.dialogues;
+		if (Array.isArray(mediaTracks)) return mediaTracks;
+		const dialogueResult = agentOutput?.result.dialogues;
+		if (Array.isArray(dialogueResult)) return dialogueResult;
+		return Array.isArray(dialogueResult?.dialogues) ? dialogueResult.dialogues : [];
+	});
 	function mediaUrl(url: string | null | undefined): string {
 		if (!url) return '';
 		const mediaPrefix = '/api/v1/pipeline/media/';
@@ -152,6 +160,11 @@
 		return mediaIndex >= 0
 			? `/api/media/${encodeURIComponent(url.slice(mediaIndex + mediaPrefix.length))}`
 			: url;
+	}
+	function dialogueAudioUrl(dialogue: DialogueTrack): string {
+		if (dialogue.audio_url) return mediaUrl(dialogue.audio_url);
+		const filename = dialogue.audio_path?.replaceAll('\\', '/').split('/').pop();
+		return filename ? `/api/media/${encodeURIComponent(filename)}` : '';
 	}
 	const selectedRelations = $derived.by(() => {
 		if (!selectedRecord || !subgraph) return [];
@@ -327,7 +340,7 @@
 				agentOutput = run;
 			}
 			agentOutput = run;
-			agentResultsOpen = group === 'review' || group === 'research';
+			agentResultsOpen = group === 'review' || group === 'research' || group === 'voice';
 			agentRuns = [run, ...agentRuns.filter((item) => item.id !== run.id)].slice(0, 12);
 			if (run.status === 'failed') throw new Error(run.error || 'The agent run failed.');
 			if (run.status === 'cancelled') throw new Error('The agent run was cancelled.');
@@ -1307,19 +1320,14 @@
 						src={mediaUrl(agentOutput.result.media.image_url)}
 						alt="Generated storyboard for this chapter"
 					/>{/if}
-				{#if agentOutput.result.media?.dialogues?.length || agentOutput.result.dialogues?.dialogues?.length}<div
-						class="mt-3 grid gap-2"
-					>
-						{#each agentOutput.result.media?.dialogues ?? agentOutput.result.dialogues?.dialogues ?? [] as dialogue, index (index)}<article
-								class="rounded border bg-background p-2 text-sm"
-							>
+				{#if generatedDialogueTracks.length}<section class="mt-3 grid gap-2">
+						<p class="text-xs font-semibold tracking-wide text-primary uppercase">Generated dialogue and narration</p>
+						{#each generatedDialogueTracks as dialogue, index (`${dialogue.speaker}-${index}`)}<article class="rounded border bg-background p-2 text-sm">
 								<p class="font-medium">{dialogue.speaker}</p>
 								<p class="text-muted-foreground">{dialogue.line}</p>
-								{#if dialogue.audio_url}<audio class="mt-2 w-full" controls src={mediaUrl(dialogue.audio_url)}
-									><track kind="captions" /></audio
-								>{/if}
+								{#if dialogueAudioUrl(dialogue)}<audio class="mt-2 w-full" controls preload="metadata" src={dialogueAudioUrl(dialogue)}><track kind="captions" /></audio>{:else}<p class="mt-2 text-xs text-destructive">This track has no playable audio file.</p>{/if}
 							</article>{/each}
-					</div>{/if}
+					</section>{/if}
 				{#if agentOutput.result.text_patches?.length}<Button
 						class="mt-3"
 						size="sm"
@@ -1474,7 +1482,7 @@
 <Dialog.Root bind:open={agentResultsOpen}>
 	<Dialog.Content class="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
 		<Dialog.Header>
-			<Dialog.Title>{agentOutput?.agent_group === 'review' ? 'Continuity and graph feedback' : 'Historical accuracy and lore research'}</Dialog.Title>
+			<Dialog.Title>{agentOutput?.agent_group === 'review' ? 'Continuity and graph feedback' : agentOutput?.agent_group === 'voice' ? 'Generated dialogue and narration' : 'Historical accuracy and lore research'}</Dialog.Title>
 			<Dialog.Description>{agentOutput?.message ?? 'The agent result is ready to review.'}</Dialog.Description>
 		</Dialog.Header>
 		{#if agentOutput?.agent_group === 'review'}<div class="grid gap-3">
@@ -1486,6 +1494,12 @@
 				{#if agentOutput.result.graph_proposals?.length && proposalSource === 'review'}<p class="rounded-md bg-muted p-3 text-sm">
 					{agentOutput.result.graph_proposals.length} graph feedback proposal(s) are available in the graph panel. Select the facts you want, then use <strong>Apply selected</strong>.
 				</p>{/if}
+			</div>{:else if agentOutput?.agent_group === 'voice'}<div class="grid gap-3">
+				{#if generatedDialogueTracks.length}{#each generatedDialogueTracks as dialogue, index (`modal-${dialogue.speaker}-${index}`)}<article class="rounded-md border p-3">
+					<p class="font-medium">{dialogue.speaker}</p>
+					<p class="mt-1 text-sm text-muted-foreground">{dialogue.line}</p>
+					{#if dialogueAudioUrl(dialogue)}<audio class="mt-3 w-full" controls preload="metadata" src={dialogueAudioUrl(dialogue)}><track kind="captions" /></audio>{:else}<p class="mt-2 text-sm text-destructive">No playable audio file was returned for this line.</p>{/if}
+				</article>{/each}{:else}<p class="rounded-md border p-3 text-sm text-muted-foreground">No dialogue or narration tracks were returned. Ensure the chapter has prose or explicit speaker lines, then run audio generation again.</p>{/if}
 			</div>{:else if agentOutput?.result.report}<div class="grid gap-3">
 				<section class="rounded-md border bg-muted/30 p-3 text-sm">
 					<h3 class="font-semibold">What this research checked</h3>

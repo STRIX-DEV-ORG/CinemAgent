@@ -39,6 +39,13 @@ export type TextProposal = {
 };
 export type AgentGroup =
 	'analysis' | 'draft' | 'review' | 'research' | 'visuals' | 'voice' | 'produce';
+export type DialogueTrack = {
+	speaker: string;
+	line: string;
+	emotion?: string | null;
+	audio_url?: string | null;
+	audio_path?: string | null;
+};
 export type AgentRun = {
 	id: string;
 	graph_id: string;
@@ -107,11 +114,9 @@ export type AgentRun = {
 				excerpt: string;
 				image_url?: string | null;
 			}>;
-			dialogues?: Array<{ speaker: string; line: string; audio_url?: string | null }>;
+			dialogues?: DialogueTrack[];
 		};
-		dialogues?: {
-			dialogues?: Array<{ speaker: string; line: string; audio_url?: string | null }>;
-		};
+		dialogues?: { dialogues?: DialogueTrack[] } | DialogueTrack[];
 		pdf_path?: string | null;
 		[key: string]: unknown;
 	};
