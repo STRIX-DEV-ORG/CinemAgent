@@ -137,18 +137,12 @@
 		intelligenceOpen = true;
 		intelligenceLoading = true;
 		try {
-			const [loadedHealth, loadedPresence, loadedTimeline, loadedMetrics, loadedEvents] = await Promise.all([
-				workspaceApi.storyHealth(params.graphId),
-				workspaceApi.characterPresence(params.graphId),
-				workspaceApi.relationTimeline(params.graphId),
-				workspaceApi.intelligenceMetrics(params.graphId),
-				workspaceApi.events(params.graphId)
-			]);
-			health = loadedHealth;
-			presence = loadedPresence;
-			relationTimeline = loadedTimeline;
-			metrics = loadedMetrics;
-			recentEvents = loadedEvents;
+			const snapshot = await workspaceApi.intelligence(params.graphId);
+			health = snapshot.health;
+			presence = snapshot.presence;
+			relationTimeline = snapshot.relation_timeline;
+			metrics = snapshot.metrics;
+			recentEvents = snapshot.events;
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : 'Could not load story intelligence.';
 		} finally {

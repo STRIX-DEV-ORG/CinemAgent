@@ -29,6 +29,7 @@
 	const nodeHeight = 104;
 	const horizontalGap = 96;
 	const verticalGap = 76;
+	const positions = new Map<string, { x: number; y: number }>();
 
 	function gridPosition(index: number, total: number) {
 		// Fixed node dimensions plus generous gutters guarantee that every
@@ -40,23 +41,20 @@
 		};
 	}
 
-	function overlaps(position: { x: number; y: number }, other: Node) {
-		return (
-			position.x < other.position.x + nodeWidth &&
-			position.x + nodeWidth > other.position.x &&
-			position.y < other.position.y + nodeHeight &&
-			position.y + nodeHeight > other.position.y
-		);
-	}
-
 	function resolveDrop(node: Node) {
-		const otherNodes = nodes.filter((candidate) => candidate.id !== node.id);
-		if (!otherNodes.some((candidate) => overlaps(node.position, candidate))) return;
-
 		const stepX = nodeWidth + horizontalGap;
 		const stepY = nodeHeight + verticalGap;
 		const originColumn = Math.round(node.position.x / stepX);
 		const originRow = Math.round(node.position.y / stepY);
+		const occupied = new Set(
+			nodes.filter((candidate) => candidate.id !== node.id).map((candidate) =>
+				`${Math.round(candidate.position.x / stepX)}:${Math.round(candidate.position.y / stepY)}`
+			)
+		);
+		if (!occupied.has(`${originColumn}:${originRow}`)) {
+			positions.set(node.id, node.position);
+			return;
+		}
 		let freePosition: { x: number; y: number } | undefined;
 
 		// Search outward from the dropped slot so the node settles in the closest
@@ -69,7 +67,7 @@
 						x: (originColumn + columnOffset) * stepX,
 						y: (originRow + rowOffset) * stepY
 					};
-					if (!otherNodes.some((candidate) => overlaps(position, candidate))) {
+					if (!occupied.has(`${originColumn + columnOffset}:${originRow + rowOffset}`)) {
 						freePosition = position;
 						break;
 					}
@@ -78,6 +76,7 @@
 		}
 
 		if (freePosition) {
+			positions.set(node.id, freePosition);
 			nodes = nodes.map((candidate) =>
 				candidate.id === node.id ? { ...candidate, position: freePosition } : candidate
 			);
@@ -102,7 +101,7 @@
 		nodes = records.map(({ item, kind }, index) => ({
 			id: String(item.id),
 			type: 'narrative',
-			position: gridPosition(index, records.length),
+			position: positions.get(String(item.id)) ?? gridPosition(index, records.length),
 			style: `width: ${nodeWidth}px; height: ${nodeHeight}px;`,
 			data: {
 				label: item.name || item.description || item.content || item.element_type || item.type || item.id,

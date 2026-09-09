@@ -38,8 +38,6 @@ class WorkspaceService:
             snapshot.update(payload or {})
             self.intelligence.append_event(graph_id, event_type, actor_type="writer", chapter_id=chapter.id,
                                            version=chapter.revision, payload=snapshot)
-            if self.projections:
-                self.projections.project_graph(graph_id)
 
     @staticmethod
     def _chapter(row: dict[str, Any]) -> ChapterResponse:

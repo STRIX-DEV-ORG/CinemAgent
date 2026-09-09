@@ -16,12 +16,29 @@ import type {
 	NarrativeHistoryEvent
 } from './types';
 
+const getRequests = new Map<string, { expiresAt: number; value: Promise<unknown> }>();
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+	const method = init?.method?.toUpperCase() ?? 'GET';
+	if (method === 'GET') {
+		const cached = getRequests.get(path);
+		if (cached && cached.expiresAt > Date.now()) return cached.value as Promise<T>;
+	}
+	const value = (async () => {
 	const response = await fetch(path, init);
 	if (!response.ok)
 		throw new Error((await response.text()) || `Request failed with status ${response.status}`);
 	if (response.status === 204) return undefined as T;
 	return response.json() as Promise<T>;
+	})();
+	if (method === 'GET') getRequests.set(path, { expiresAt: Date.now() + 5_000, value });
+	else getRequests.clear();
+	try {
+		return await value;
+	} catch (error) {
+		getRequests.delete(path);
+		throw error;
+	}
 }
 
 export const narrativeApi = {
@@ -444,6 +461,7 @@ export const workspaceApi = {
 	characterPresence: (graphId: string) => request<CharacterPresence[]>(workspacePath(graphId, '/intelligence/character-presence')),
 	relationTimeline: (graphId: string) => request<RelationTimelineItem[]>(workspacePath(graphId, '/intelligence/relation-timeline')),
 	intelligenceMetrics: (graphId: string) => request<IntelligenceMetrics>(workspacePath(graphId, '/intelligence/metrics')),
+	intelligence: (graphId: string) => request<{ health: StoryHealth; presence: CharacterPresence[]; relation_timeline: RelationTimelineItem[]; metrics: IntelligenceMetrics; events: NarrativeHistoryEvent[] }>(workspacePath(graphId, '/intelligence')),
 	events: (graphId: string) => request<NarrativeHistoryEvent[]>(workspacePath(graphId, '/events?limit=20')),
 	semanticSearch: (graphId: string, query: string) =>
 		request<Array<{ source_type: string; source_id: string; chapter_id: string | null; content: string; metadata: Record<string, unknown>; distance: number; destination?: { kind: 'chapter' | 'node'; chapter_id: string | null; node_id?: string; node_type?: string } }>>(

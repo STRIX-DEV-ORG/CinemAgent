@@ -1,4 +1,5 @@
 """FastAPI dependencies shared by narrative graph routes."""
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from fastapi import Header, HTTPException, status
@@ -22,6 +23,8 @@ def require_admin_api_key(authorization: str | None = Header(default=None)) -> N
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid narrative admin API key")
 
 
+@lru_cache(maxsize=1)
 def get_service() -> "NarrativeGraphService":
+    """Reuse expensive service composition and embedder state across requests."""
     from .service import NarrativeGraphService
     return NarrativeGraphService()
